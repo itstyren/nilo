@@ -1,0 +1,6 @@
+*.egg-info
+.eggs/
+a.py
+a.tex
+__pycache__/
+results/
