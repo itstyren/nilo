@@ -22,12 +22,9 @@ class CoinGameAction:
 
 
 class Agent:
-    """
-    A class for the agents in the coin game
-    """
 
     def __init__(self,idx,grid_size):
-        # name & index
+
         self.name = ""
         self.index = idx
         self.grid_size = grid_size
@@ -43,10 +40,6 @@ class Agent:
 
 
     def reset(self):
-        '''
-        Reset the agent's position to a random location on the grid
-        Will be called when resetting the world
-        '''
         flat_pos = np.random.randint(self.grid_size**2)
         self.position = np.array([flat_pos // self.grid_size, flat_pos % self.grid_size], dtype=np.int32)
         self.previous_state = None
@@ -60,9 +53,6 @@ class Agent:
 
 
 class World:
-    """
-    A world class for the donation game
-    """
 
     def __init__(self,num_agents, grid_size):
         self.num_agents = num_agents
@@ -83,19 +73,12 @@ class World:
         return np.array([agent.position for agent in self.agents], dtype=np.int32)
 
     def step(self, actions):
-        """
-        update agent movement action, take a step in the world
-        """
         for idx, agent in enumerate(self.agents):
             agent.action.s = actions[idx]
             move = CoinGameAction.get_move(agent.action.s)
             agent.move(move)
-    
 
     def get_agent_recipients_idx(self):
-        """
-        Get the recipient index for each agent
-        """
         recipients = []
         for i, agent in enumerate(self.agents):
             recipient_idx = (i + 1) % self.num_agents

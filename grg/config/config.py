@@ -3,9 +3,6 @@ from typing import Dict
 
 
 def get_config():
-    """
-    Get the configuration from the command line arguments.
-    """
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
@@ -18,7 +15,7 @@ def get_config():
         type=int,
         default=10e6,
     )
-    # CUDA parameters
+
     parser.add_argument(
         "--cuda",
         action="store_true",
@@ -44,7 +41,7 @@ def get_config():
         type=int,
         default=1,
     )
-    # Environment settings
+
     parser.add_argument(
         "--project_name",
         type=str,
@@ -120,14 +117,14 @@ def get_config():
         default='RL',
     )
 
-    # environment parameters for coin game
+
     parser.add_argument(
         "--grid_size",
         type=int,
         default=3,
     )
 
-    # Algorithm Parameters
+
     parser.add_argument(
         "--algorithm_name",
         choices=["PPO", 'DEV'],
@@ -273,9 +270,7 @@ def get_config():
         choices=["None",'NL','NoRepu'],
         default="None",
     )
-    
-    
-    # Logging
+
     parser.add_argument(
         "--use_wandb",
         action="store_true",
@@ -287,10 +282,10 @@ def get_config():
         default="Anonymous",
     )
 
-    # save parameters
+
     parser.add_argument("--save_interval", type=int, default=1e8)
 
-    # render parameters
+
     parser.add_argument(
         "--use_render",
         action="store_true",
@@ -300,7 +295,7 @@ def get_config():
     parser.add_argument("--save_gifs", action='store_true', default=False)
     parser.add_argument("--ifi", type=float, default=0.1)
 
-    # optimizer parameters
+
     parser.add_argument(
         "--dilemma_lr", type=float, default=5e-4)
     parser.add_argument(
@@ -316,14 +311,14 @@ def get_config():
         default=False,
     )
 
-    # pretrained parameters
+
     parser.add_argument(
         "--model_dir",
         type=str,
         default=None,
     )
 
-    # PPO neural network parameters
+
     parser.add_argument(
         "--repu_net_arch",
         nargs="+",
@@ -338,7 +333,7 @@ def get_config():
         default=dict(pi=[16, 16], vf=[16, 16]),
     )
 
-    # log parameters
+
     parser.add_argument(
         "--log_interval",
         type=int,
@@ -354,9 +349,6 @@ def get_config():
 
 
 def update_config(parsed_args) -> Dict:
-    """
-    This function is called after the command line arguments are parsed.
-    """
     import os
 
     current_directory = os.getcwd()

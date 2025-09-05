@@ -16,12 +16,9 @@ from stable_baselines3.common.preprocessing import get_obs_shape
 
 
 class BaseRunner(object):
-    """
-    Base class for all runners
-    """
 
     def __init__(self, config):
-        # pass the configuration
+
         self.all_args = config["all_args"]
         self.envs = config["envs"]
         self.device = config["device"]
@@ -32,8 +29,8 @@ class BaseRunner(object):
             self.action_space = self.envs.action_space
             self.n_envs = self.envs.num_envs
 
-        # setting from cli arguments
-        self._total_timesteps = self.all_args.total_timesteps  # the total train steps
+
+        self._total_timesteps = self.all_args.total_timesteps
         self.episode_length = self.all_args.episode_length
         self.use_wandb = self.all_args.use_wandb
         self.n_rollout_threads = self.all_args.n_rollout_threads
@@ -49,9 +46,9 @@ class BaseRunner(object):
         self.baseline_type = self.all_args.baseline_type
         self.attention_weights= self.all_args.attention_weights
 
-        self.ep_info_buffer = None  # type: Optional[deque]
-        self.dilemma_train_info_buffer = None  # type: Optional[deque]
-        self.repu_train_info_buffer = None  # type: Optional[deque]
+        self.ep_info_buffer = None
+        self.dilemma_train_info_buffer = None
+        self.repu_train_info_buffer = None
 
         self._num_timesteps_at_start = 0
         self.num_timesteps = 0
@@ -65,20 +62,20 @@ class BaseRunner(object):
         self._last_episode_starts = None
         self._finish_first_dilemma = False
 
-        # discount factor
+
         self.gamma = self.all_args.gamma
 
-        # report environment configuration
+
         self.env_report()
         self._setup_logging(config)
 
-        # dir
+
         self.model_dir = self.all_args.model_dir
 
         if self.model_dir is not None:
             self.restore()
 
-        # if decay learning rate for optimizer
+
         if self.all_args.use_linear_lr_decay:
             dilemma_learning_rate = utils.linear_schedule_to_0(self.all_args.dilemma_lr)
             repu_learning_rate = utils.linear_schedule_to_0(self.all_args.repu_lr)
@@ -86,7 +83,7 @@ class BaseRunner(object):
             dilemma_learning_rate = self.all_args.dilemma_lr
             repu_learning_rate = self.all_args.repu_lr
 
-        # if decay update time for optimizer
+
         if self.all_args.use_linear_update:
             self.repu_n_epochs = utils.linear_countdown_to_1(
                 self.all_args.repu_n_epochs
@@ -107,7 +104,7 @@ class BaseRunner(object):
         else:
             self.dilemma_train_freq = self.all_args.dilemma_train_freq
 
-        # Alternate training of assessment and action networks
+
         self._train_repu = True if self.dilemma_train_freq != 0 else False
 
         self.set_random_seed(self.all_args.seed)
@@ -130,18 +127,12 @@ class BaseRunner(object):
             self.norm_pattern = norms[self.norm_type]
 
     def env_report(self):
-        """
-        Print the observation and action space of the environment
-        """
         print("====== Environment Configuration ======")
         print("observation_space: ", self.observation_space)
         print("action_space: ", self.action_space)
         print("=" * 40)
 
     def _setup_logging(self, config):
-        """
-        Setup logging for the training process
-        """
         if self.use_wandb:
             self.save_dir = str(wandb.run.dir)
             self.run_dir = str(wandb.run.dir)
@@ -149,7 +140,7 @@ class BaseRunner(object):
             self.gif_dir = str(self.run_dir + "/gifs")
             self.plot_dir = str(self.run_dir + "/plots")
         else:
-            #  Configure directories for logging and saving models manually
+
             self.run_dir = config["run_dir"]
             self.log_dir = str(self.run_dir / "logs")
             if not os.path.exists(self.log_dir):
@@ -167,22 +158,19 @@ class BaseRunner(object):
         if not os.path.exists(self.plot_dir):
             os.makedirs(self.plot_dir)
 
-        # training start time
+
         self.start_time = time.time_ns()
 
         if self.ep_info_buffer is None:
             self.ep_info_buffer = deque(maxlen=self.episode_length)
         if (
             self.dilemma_train_info_buffer is None
-        ):  # only store the one training info, but all agents
+        ):
             self.dilemma_train_info_buffer = deque(maxlen=self.num_agents)
         if self.repu_train_info_buffer is None:
             self.repu_train_info_buffer = deque(maxlen=self.num_agents)
 
     def _setup_model(self, dilemma_learning_rate, repu_learning_rate):
-        """
-        Setup the model for training
-        """
         if self.norm_type == "RL":
             from grg.algorithm.reputation.policy import (
                 ReputationPolicy as ReputationPolicy,
@@ -232,7 +220,7 @@ class BaseRunner(object):
                         ent_coef=self.all_args.dilemma_ent_coef,
                         n_epochs=self.repu_n_epochs,
                         n_steps=self.n_steps,
-                        # batch_size=self.n_steps*self.n_envs,
+
                         batch_size=self.r_minibatch_size,
                         normalize_advantage=True,
                         device=self.device,
@@ -283,15 +271,14 @@ class BaseRunner(object):
                     buffer_type="dilemma",
                     last_repu_obs_shape=repu_obs_shape,
                     buffer_index=_,
-                    
                 )
             )
             if self.baseline_type == "None":
                 self.repu_buffers.append(
                     self.repu_rollout_buffer_class(
-                        # self.all_args.n_steps-int(self.n_steps/self.episode_length),
+
                         self.all_args.n_steps,
-                        # - repu_buffer_reduction,  # the first dilemma step reward is not used
+
                         self.observation_space["reputation"],
                         self.action_space["reputation"],
                         self.device,
@@ -300,7 +287,7 @@ class BaseRunner(object):
                         num_recipients=self.num_recipients,
                         num_agents=self.num_agents,
                         buffer_type="reputation",
-                        # norm_type=self.norm_type,
+
                         norm_type="attention",
                         last_repu_obs_shape=repu_obs_shape,
                         buffer_index=_,
@@ -310,12 +297,6 @@ class BaseRunner(object):
         print("Model setup complete")
 
     def set_random_seed(self, seed: Optional[int] = None) -> None:
-        """
-        Set the seed of the pseudo-random generators
-        (python, numpy, pytorch, gym, action_space)
-
-        :param seed:
-        """
         set_random_seed(seed, using_cuda=self.device.type == torch.device("cuda").type)
         self.action_space.seed(seed)
 
@@ -331,27 +312,15 @@ class BaseRunner(object):
     def _update_current_progress_remaining(
         self, num_timesteps: int, total_timesteps: int
     ) -> None:
-        """
-        Compute current progress remaining (starts from 1 and ends to 0)
-
-        :param num_timesteps: current number of timesteps
-        :param total_timesteps:
-        """
         return 1.0 - float(num_timesteps) / float(total_timesteps)
 
     def _update_info_buffer(self, infos: list[dict[str, Any]]) -> None:
-        """
-        Retrieve env info and store it in the buffer
-        """
         assert self.ep_info_buffer is not None, "self.ep_info_buffer is None"
 
         for idx, info in enumerate(infos):
             self.ep_info_buffer.extend([info])
 
     def print_episode_stats(self, logger_info):
-        """
-        Print the stats of the episode
-        """
         print("-" * 44)
         print("| Reward/ {:>32} |".format(" " * 10))
         print(
@@ -359,7 +328,7 @@ class BaseRunner(object):
                 logger_info["results/average_rewards"]
             )
         )
-        # Reputation
+
         print("| Reputation/ {:>29}|".format(" " * 10))
         print(
             "|    Average Repu  {:>23.3f} |".format(
@@ -383,11 +352,8 @@ class BaseRunner(object):
                     logger_info["dilemma_train/n_updates"]
                 )
             )
-            # print(
-            #     "|    Dilemma Learning Rate  {:>14.3f} |".format(
-            #         logger_info["dilemma_train/learning_rate"]
-            #     )
-            # )
+
+
             print(
                 "|    Dilemma train_freq  {:>17.3f} |".format(
                     logger_info["time/dilemma_train_freq"]
@@ -435,7 +401,7 @@ class BaseRunner(object):
                     logger_info["repu_train/loss"]
                 )
             )
-        # Environment
+
         print("| Environment/ {:>28}|".format(" " * 10))
         print(
             "|    Average Coop Level  {:>17.3f} |".format(
@@ -460,23 +426,11 @@ class BaseRunner(object):
         print("-" * 44, "\n")
 
     def log_metrics(self, logging_infos):
-        """
-        Log episode info.
-        :param logging_infos: (dict) information about episode update.
-        :param total_num_steps: (int) total number of training env steps.
-        """
         if self.use_wandb:
             wandb.log({**logging_infos, "Steps": self.num_timesteps})
-        # for k, v in logging_infos.items():
-        #     if self.use_wandb:
-        #         wandb.log({k: v}, step=self._internal_timesteps)
-        #     else:
-        #         self.logger.add_scalars(k, {k: v}, self._internal_timesteps)
+
 
     def restore(self):
-        """
-        Restore the model from the path specified in the config
-        """
         raise NotImplementedError("Restore not implemented yet")
         for i in range(self.num_agents):
             print("Loading model from: ", self.model_dir)

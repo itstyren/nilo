@@ -97,16 +97,15 @@ class CoinGame(VectorizedEnv):
         dim=0,
     )
     COIN_REWARD = 1.0
-    # COIN_MISMATCH_PUNISHMENT = -2
 
-    # Class-level constant for agent colors (RGBA)
+
     DEFAULT_AGENT_COLORS = [
-        (255, 0, 0, 128),     # Red
-        (0, 0, 255, 128),     # Blue
-        (0, 255, 0, 128),     # Green
-        (255, 255, 0, 128),   # Yellow
-        (255, 0, 255, 128),   # Magenta
-        (0, 255, 255, 128),   # Cyan
+        (255, 0, 0, 128),
+        (0, 0, 255, 128),
+        (0, 255, 0, 128),
+        (255, 255, 0, 128),
+        (255, 0, 255, 128),
+        (0, 255, 255, 128),
     ]
 
     def __init__(
@@ -147,7 +146,7 @@ class CoinGame(VectorizedEnv):
                     f"Too many agents ({self.num_agents}) for the available colors ({len(self.DEFAULT_AGENT_COLORS)})."
                 )
 
-            # Generate agent surfaces using procedurally generated robot avatars
+
             self.agent_surfaces = [
                 self._generate_robot_surface(color[:3]) for color in self.agent_colors
             ]
@@ -187,16 +186,15 @@ class CoinGame(VectorizedEnv):
             self.coin_positions[mask, coin_idx, :] = new_coin_pos
 
     def _generate_robot_surface(self, color, size=None):
-        """Create a pixel-style robot avatar surface."""
         size = size or (self.grid_width, self.grid_height)
         surf = pygame.Surface(size, pygame.SRCALPHA)
         w, h = size
 
-        # Robot body
+
         body_rect = pygame.Rect(w * 0.2, h * 0.2, w * 0.6, h * 0.6)
         pygame.draw.rect(surf, color, body_rect)
 
-        # Eyes (black squares)
+
         eye_size = w // 6
         eye_x1 = int(w * 0.3)
         eye_x2 = int(w * 0.6)
@@ -204,21 +202,19 @@ class CoinGame(VectorizedEnv):
         pygame.draw.rect(surf, (0, 0, 0), (eye_x1, eye_y, eye_size, eye_size))
         pygame.draw.rect(surf, (0, 0, 0), (eye_x2, eye_y, eye_size, eye_size))
 
-        # Arms
+
         arm_w = w * 0.15
         arm_h = h * 0.3
         pygame.draw.rect(surf, color, (0, h * 0.35, arm_w, arm_h))
         pygame.draw.rect(surf, color, (w - arm_w, h * 0.35, arm_w, arm_h))
 
-        # Legs
+
         leg_w = w * 0.2
         leg_h = h * 0.2
         pygame.draw.rect(surf, color, (w * 0.25, h - leg_h, leg_w, leg_h))
         pygame.draw.rect(surf, color, (w * 0.55, h - leg_h, leg_w, leg_h))
 
         return surf
-
-
 
 
     def _generate_observations(self):
@@ -262,10 +258,10 @@ class CoinGame(VectorizedEnv):
         moves = torch.index_select(self.moves, 0, actions.view(-1)).view(
             self.batch_size, self.num_agents, 2
         )
-        # self.agent_positions = (self.agent_positions + moves).clamp(0, self.grid_size - 1)
+
         self.agent_positions = (self.agent_positions + moves) % self.grid_size
 
-        # Check coin collections and compute rewards
+
         for coin_idx in range(self.num_agents):
             coin_pos = self.coin_positions[:, coin_idx, :]
             collected_coins[:, coin_idx] = (
@@ -277,7 +273,7 @@ class CoinGame(VectorizedEnv):
             ).T
             total_coin_counts[:, coin_idx] = coin_count_per_batch.sum(
                 dim=0
-            )  # Sum across batches
+            )
             rewards += coin_count_per_batch * self.COIN_REWARD
 
             mismatched_coin_count = coin_count_per_batch[:, 0:coin_idx].sum(
@@ -286,11 +282,10 @@ class CoinGame(VectorizedEnv):
             rewards[:, coin_idx] += (
                 mismatched_coin_count * self.COIN_MISMATCH_PUNISHMENT
             )
-            # if mismatched_coin_count!=0:
-            #     breakpoint()
+
 
         self._generate_coins(collected_coins)
-        # observations = [self._generate_observations(agent_idx) for agent_idx in range(self.num_agents)]
+
         observations = self._generate_observations()
         self.step_count += 1
         done = (self.step_count >= self.max_steps) * torch.ones(
@@ -311,9 +306,9 @@ class CoinGame(VectorizedEnv):
 
     def _draw_grid(self, agent_positions, coin_positions):
         import math
-        self.screen.fill((30, 30, 30))  # Dark background
+        self.screen.fill((30, 30, 30))
 
-        # --- Scoreboard ---
+
         margin_top = 40
         pygame.draw.rect(self.screen, (40, 40, 40), (0, 0, self.screen_size[0], margin_top))
 
@@ -323,7 +318,7 @@ class CoinGame(VectorizedEnv):
             text = self.font.render(f"Agent {agent_idx}: {coins}", True, color)
             self.screen.blit(text, (20 + agent_idx * 150, 10))
 
-        # --- Grid ---
+
         for i in range(self.grid_size):
             for j in range(self.grid_size):
                 coords = torch.LongTensor([i, j]).to(self.device)
@@ -334,11 +329,11 @@ class CoinGame(VectorizedEnv):
                 rect = pygame.Rect(*grid_pos, self.grid_width, self.grid_height)
                 cx, cy = rect.center
 
-                # Draw tile background
+
                 pygame.draw.rect(self.screen, (50, 50, 50), rect)
                 pygame.draw.rect(self.screen, (120, 120, 120), rect, width=2)
 
-                # Draw coins with offset if multiple in same cell
+
                 for k, match in enumerate(coin_matches):
                     coin_idx = match.item()
                     angle = 2 * math.pi * k / max(1, len(coin_matches))
@@ -352,31 +347,29 @@ class CoinGame(VectorizedEnv):
                     )
 
 
-
-                # --- Draw agents (if present) ---
                 if agent_matches.size(0) > 0:
                     for k, match in enumerate(agent_matches):
                         agent_idx = match.item()
                         robot_surface = self.agent_surfaces[agent_idx]
 
-                        # Shrink the robot sprite
+
                         shrink_factor = 0.6
                         robot_w = int(self.grid_width * shrink_factor)
                         robot_h = int(self.grid_height * shrink_factor)
                         robot_surface_small = pygame.transform.scale(robot_surface, (robot_w, robot_h))
 
-                        # Offset position if multiple agents on same tile
+
                         angle = 2 * math.pi * k / max(1, len(agent_matches))
                         offset_radius = 8
                         offset_x = int(math.cos(angle) * offset_radius)
                         offset_y = int(math.sin(angle) * offset_radius)
 
-                        # Apply margin offset and position
-                        robot_center = (cx + offset_x, cy + offset_y + 8)  # slightly lower
+
+                        robot_center = (cx + offset_x, cy + offset_y + 8)
                         robot_rect = robot_surface_small.get_rect(center=robot_center)
                         self.screen.blit(robot_surface_small, robot_rect.topleft)
 
-                        # Optional: show feedback text for this agent
+
                         if coin_matches.size(0) > 0:
                             coin_indices = [m.item() for m in coin_matches]
                             if agent_idx in coin_indices:
@@ -386,21 +379,19 @@ class CoinGame(VectorizedEnv):
                                 text = self.font.render("-1", True, (255, 0, 0))
                                 self.screen.blit(text, (robot_center[0] - 10, robot_center[1] - self.grid_height // 2))
 
-                        # --- Draw move direction arrow ---
+
                         if hasattr(self, "last_actions"):
                             move = self.last_actions[0, agent_idx].item()
                             arrow_len = 14
                             arrow_color = self.agent_colors[agent_idx][:3]
-                            if move in [0, 1, 2, 3]:  # Not STAY
+                            if move in [0, 1, 2, 3]:
                                 dx, dy = self.MOVES[move].cpu().tolist()
 
                                 end_x = robot_center[0] + dx * arrow_len
                                 end_y = robot_center[1] + dy * arrow_len
 
                                 pygame.draw.line(self.screen, arrow_color, robot_center, (end_x, end_y), width=2)
-                                
-                                
-                                # Arrowhead
+
                                 if dx != 0 or dy != 0:
                                     angle = math.atan2(dy, dx)
                                     head_len = 6
@@ -413,10 +404,6 @@ class CoinGame(VectorizedEnv):
                                         end_y - head_len * math.sin(angle + math.pi / 6)
                                     )
                                     pygame.draw.polygon(self.screen, arrow_color, [left, right, (end_x, end_y)])
-
-
-
-
 
 
     @staticmethod

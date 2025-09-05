@@ -12,20 +12,20 @@ import time
 MOVE_NAMES = ["RIGHT", "LEFT", "DOWN", "UP", "STAY"]
 MOVES = np.array([[0, 1], [0, -1], [1, 0], [-1, 0], [0, 0]], dtype=np.int32)
 
-# Class-level constant for agent colors (RGBA)
+
 DEFAULT_AGENT_COLORS = [
-    (230, 80, 80, 128),     # Soft Red
-    (80, 130, 230, 128),    # Soft Blue
-    (0, 200, 100, 128),     # Green (slightly muted)
-    (255, 215, 0, 128),     # Gold-like Yellow (less harsh)
-    (200, 100, 200, 128),   # Softer Magenta
-    (100, 220, 220, 128),   # Light Cyan
+    (230, 80, 80, 128),
+    (80, 130, 230, 128),
+    (0, 200, 100, 128),
+    (255, 215, 0, 128),
+    (200, 100, 200, 128),
+    (100, 220, 220, 128),
 ]
 
 COINS_FEEDBACK_COLORS = [
-    (50, 180, 100),  # Soft green for own coin
-    (240, 180, 60),  # Muted amber for other's coin
-    (200, 70, 70)  # Soft red for penalty
+    (50, 180, 100),
+    (240, 180, 60),
+    (200, 70, 70)
 ]
 
 class CoinGameEnv(AECEnv):
@@ -49,7 +49,7 @@ class CoinGameEnv(AECEnv):
         self.steps = 0
 
         self.COIN_MISMATCH_PUNISHMENT = -self.num_agents / (self.num_agents - 1)
-        # self.COIN_MISMATCH_PUNISHMENT = -1.0
+
         self.COIN_REWARD =1.0
 
         self._seed()
@@ -64,7 +64,7 @@ class CoinGameEnv(AECEnv):
                 self.grid_width = self.screen_size[0] // self.world.grid_size
                 self.grid_height = (self.screen_size[1]-50) // self.world.grid_size
                 self.coin_radius = self.grid_width // 4
-                # Generate agent surfaces using procedurally generated robot avatars
+
                 self.agent_surfaces = [
                     self._generate_robot_surface(color[:3]) for color in self.agent_colors
                 ] 
@@ -105,7 +105,6 @@ class CoinGameEnv(AECEnv):
                         self.num_agents* 2 ,
                         self.world.grid_size,
                         self.world.grid_size*2,
-                        
                     ),
                     dtype=np.float32,
                 ),
@@ -116,7 +115,6 @@ class CoinGameEnv(AECEnv):
                         self.num_agents * 2,
                         self.world.grid_size,
                         self.world.grid_size*2,
-                        
                     ),
                     dtype=np.float32,
                 ),
@@ -127,11 +125,10 @@ class CoinGameEnv(AECEnv):
                         self.num_agents* 2 ,
                         self.world.grid_size,
                         self.world.grid_size*3,
-                        
                     ),
                     dtype=np.float32,
                 ),
-                # "reputation_vf": spaces.Box(0, 1, shape=(self.num_agents * 2+2, self.world.grid_size, self.world.grid_size), dtype=np.float32),
+
             }
         )
         return observation_space
@@ -176,7 +173,7 @@ class CoinGameEnv(AECEnv):
             (self.num_agents,), dtype=int
         )
 
-        # get current actions
+
         self.current_dilemma_action = [agent.action.s for agent in self.world.agents]
         self.current_reputation_action = [
             [0.0 for _ in agent.reputation_view] for agent in self.world.agents
@@ -190,9 +187,6 @@ class CoinGameEnv(AECEnv):
         return obs_all
 
     def observe_single(self, agent_name):
-        """
-        Observe info for a single agent.
-        """
         agent = self.world.agents[self._index_map[agent_name]]
         return self.scenario.observation(agent, self.world)
 
@@ -214,13 +208,7 @@ class CoinGameEnv(AECEnv):
         return observations
 
     def _execute_reputation_world_step(self):
-        """
-        Execute one full environment step after all agents have selected their reputation actions.
 
-        - Applies all stored reputation actions to update agent reputations.
-        - Returns updated observations and infos.
-        """
-        # Apply the stored reputation actions to update agent reputations
 
         for agent_idx, agent in enumerate(self.world.agents):
             self.scenario.update_repu_view(
@@ -234,9 +222,6 @@ class CoinGameEnv(AECEnv):
         for i, coin in enumerate(self.coin_taken_by_others):
             if coin > 0:
                 collected_other_coin_repu.append(np.array(self.current_reputation_action)[:,1-i])
-                
-
-
 
 
         obs_n = self.observe_all()
@@ -248,31 +233,22 @@ class CoinGameEnv(AECEnv):
         return obs_n, rewards_n, infos
 
     def _execute_dilemma_world_step(self):
-        """
-        Execute one full environment step after all agents have selected their dilemma (movement) actions.
-
-        - Applies all stored movement actions to update agent positions.
-        - Computes which agents collected which coins.
-        - Assigns rewards based on coin collection and mismatches.
-        - Respawns coins that have been collected.
-        - Returns updated observations, rewards, termination flag, and infos.
-        """
         self.last_round_coin_poistion = self.world.coins.copy()
 
-        # Apply the stored movement actions to update agent positions
+
         self.world.step(self.current_dilemma_action)
 
-        # Initialize statistics counters
+
         self.collected_coins = np.zeros(
             (self.num_agents,), dtype=int
-        )  # total coins collected per agent
+        )
         self.own_coin_collected = np.zeros((self.num_agents,), dtype=int)
         self.coin_taken_by_others = np.zeros((self.num_agents,), dtype=int)
 
         agent_positions = self.world.get_agent_positions()
 
-        # Check which agent collected which coin
-        for coin_idx in range(self.num_agents):  # Each coin belongs to agent with same index
+
+        for coin_idx in range(self.num_agents):
             coin_pos = self.world.coins[coin_idx]
             for agent_idx in range(self.num_agents):
                 agent_pos = agent_positions[agent_idx]
@@ -281,55 +257,53 @@ class CoinGameEnv(AECEnv):
                     if agent_idx == coin_idx:
                         self.own_coin_collected[agent_idx] += 1
                     else:
-                        # Someone else took this agent's coin
-                        # self.coin_taken_by_others[agent_idx] += 1
+
+
                         self.coin_taken_by_others[coin_idx] += 1
 
-        # Calculate rewards based on coins collected
+
         rewards = []
 
         for agent_idx, agent in enumerate(self.agents):
             reward = 0.0
-            # +1 reward for own coin
-            # reward += self.own_coin_collected[agent_idx] * self.COIN_REWARD 
+
+
             reward += self.collected_coins[agent_idx] * self.COIN_REWARD 
-            # Penalty for collecting by other
+
             reward += self.coin_taken_by_others[agent_idx] * self.COIN_MISMATCH_PUNISHMENT
 
             rewards.append(reward)
             self.rewards[agent] = reward
-        
         self._accumulate_rewards()
 
 
-        # Respawn collected coins
         for coin_idx in range(self.num_agents):
             coin_collected = False
             for agent_idx in range(self.num_agents):
                 if np.all(agent_positions[agent_idx] == self.world.coins[coin_idx]):
                     coin_collected = True
-                    break  # No need to check other agents
+                    break
 
             if coin_collected:
-                # Build a set of occupied positions (agents + existing coins excluding the current one)
+
                 occupied_positions = {tuple(pos) for pos in agent_positions}
                 for i, coin in enumerate(self.world.coins):
                     if i != coin_idx:
                         occupied_positions.add(tuple(coin))
 
-                # Generate all possible positions
+
                 all_positions = [
                     (i, j) for i in range(self.world.grid_size) for j in range(self.world.grid_size)
                 ]
-                # Filter out occupied positions
+
                 available_positions = [pos for pos in all_positions if pos not in occupied_positions]
 
-                # If there are available positions, pick one randomly
+
                 if available_positions:
                     new_pos = self.rng.choice(len(available_positions))
                     self.world.coins[coin_idx] = np.array(available_positions[new_pos], dtype=np.int32)
                 else:
-                    # Fallback: keep coin where it is or log a warning
+
                     print("Warning: No available position to respawn coin.")
 
         agent_recipients_idx = self.world.get_agent_recipients_idx()
@@ -358,10 +332,6 @@ class CoinGameEnv(AECEnv):
         return obs_n, rewards, termination, infos
 
     def get_average_reputation(self):
-        """
-        Get the overall reputation of all agents
-        :return: overall reputation of all agents
-        """
         overall_reputation = np.array(
             [agent.reputation_view for agent in self.world.agents]
         )
@@ -369,22 +339,16 @@ class CoinGameEnv(AECEnv):
         return average_reputation
 
     def step(self, action, action_type="reputaiton", move_step=True):
-        """
-        Take a step in the environment
-        Automatically switches control to the next agent.
-        :param action: the action to take
-        :param action_type: the type of action (reputaiton means only update self assessment)
-        """
         current_idx = self._index_map[self.agent_selection]
         next_idx = (current_idx + 1) % self.num_agents
-        # set agent_selection to next agent
+
         self.agent_selection = self._agent_selector.next()
         if action_type == "reputaiton":
             self.current_reputation_action[current_idx] = action
         else:
             self.current_dilemma_action[current_idx] = action[0]
 
-        # do _execute_dilemma_world_step only when all agents have gone through a step once
+
         if next_idx == 0:
             truncation = False
             termination = False
@@ -403,7 +367,7 @@ class CoinGameEnv(AECEnv):
                 if self.steps > self.max_cycles:
                     truncation = True
                     infos["terminal_observation"] = (
-                        obs_n  # store the terminal observation
+                        obs_n
                     )
                     infos["cumulative_payoffs"] = list(
                         self._cumulative_rewards.values()
@@ -412,7 +376,6 @@ class CoinGameEnv(AECEnv):
             return obs_n, reward_n, termination, truncation, infos
         elif next_idx + 1 == self.num_agents:
             self._clear_rewards()
-
 
 
     def render(self, mode=None):
@@ -432,7 +395,6 @@ class CoinGameEnv(AECEnv):
 
         else:
             raise NotImplementedError(f"Render mode '{render_mode}' is not supported.")
-        
 
 
     def _draw_screen(self, agent_positions, coin_positions):
@@ -443,15 +405,12 @@ class CoinGameEnv(AECEnv):
         pygame.draw.rect(self.screen, (70, 70, 70), (0, 0, self.screen_size[0], margin_top))
 
 
-        # --- Draw scoreboard ---
-
-        # First row: Step and total reward (centered)
         total_reward = sum(self._cumulative_rewards.values())
         info_text = self.font.render(f"Step: {self.steps} | Total R: {int(total_reward)}", True, (255, 255, 255))
         info_rect = info_text.get_rect(center=(self.screen.get_width() // 2, 10 + info_text.get_height() // 2))
         self.screen.blit(info_text, info_rect)
 
-        # Second row: Each agent's info and reward (centered block)
+
         agent_texts = []
         for agent_idx, agent in enumerate(self.world.agents):
             color = self.agent_colors[agent_idx][:3]
@@ -463,20 +422,18 @@ class CoinGameEnv(AECEnv):
             )
             agent_texts.append((text, color))
 
-        # Compute total width of all agent texts with spacing
+
         spacing = 45
         total_width = sum(text.get_width() for text, _ in agent_texts) + spacing * (len(agent_texts) - 1)
         start_x = (self.screen.get_width() - total_width) // 2
 
-        # Draw each agent text with spacing
+
         x = start_x
         for text, color in agent_texts:
-            self.screen.blit(text, (x, 40))  # 40px below the first row
+            self.screen.blit(text, (x, 40))
             x += text.get_width() + spacing
 
 
-        # --- Draw grid with coins and agents ---
-        # iterate over the grid
         for i in range(self.world.grid_size):
             for j in range(self.world.grid_size):
                 x = j * self.grid_width
@@ -484,23 +441,17 @@ class CoinGameEnv(AECEnv):
                 rect = pygame.Rect(x, y, self.grid_width, self.grid_height)
                 cx, cy = rect.center
 
-                # Draw grid cell
+
                 pygame.draw.rect(self.screen, (50, 50, 50), rect)
                 pygame.draw.rect(self.screen, (120, 120, 120), rect, width=2)
 
                 coords = np.array([i, j])
 
-                # Find coins and agents in this cell
+
                 coin_matches = np.where((coin_positions == coords).all(axis=1))[0]
                 agent_matches = np.where((agent_positions == coords).all(axis=1))[0]
-                # if coin_matches.size > 0 or agent_matches.size > 0:
-                #     print('cell:',i,j)
-                #     print('coin:',coin_positions,coin_matches)
-                #     print('agent',agent_positions, agent_matches)
-                #     print('---' * 20)
 
 
-                # --- Draw coins ---
                 for k, coin_idx in enumerate(coin_matches):
                     angle = 2 * math.pi * k / max(1, len(coin_matches))
                     offset_x = int(math.cos(angle) * 10)
@@ -512,7 +463,7 @@ class CoinGameEnv(AECEnv):
                         self.coin_radius // 1.5
                     )
 
-                # --- Draw agents ---
+
                 for k, agent_idx in enumerate(agent_matches):
                     robot_surface = self.agent_surfaces[agent_idx]
                     shrink_factor = 0.6
@@ -529,23 +480,23 @@ class CoinGameEnv(AECEnv):
                     robot_rect = robot_surface_small.get_rect(center=robot_center)
                     self.screen.blit(robot_surface_small, robot_rect.topleft)
 
-                    # --- Coin collection feedback ---
+
                     if self.last_round_collected_coins[agent_idx] < self.world.agents[agent_idx].collected_coins:
                         if self.last_round_own_coin_collected[agent_idx] < self.world.agents[agent_idx].collected_own_coins:
-                            text = self.font.render(f"+{self.COIN_REWARD}", True, COINS_FEEDBACK_COLORS[0])  #own coin
+                            text = self.font.render(f"+{self.COIN_REWARD}", True, COINS_FEEDBACK_COLORS[0])
                             self.last_round_own_coin_collected[agent_idx] = self.world.agents[agent_idx].collected_own_coins
                         else:
-                            text = self.font.render(f"+{self.COIN_REWARD}", True, COINS_FEEDBACK_COLORS[1])  # other's coin collected
+                            text = self.font.render(f"+{self.COIN_REWARD}", True, COINS_FEEDBACK_COLORS[1])
 
                         self.last_round_collected_coins[agent_idx] = self.world.agents[agent_idx].collected_coins
                         self.screen.blit(text, (robot_center[0] - 10, robot_center[1] - self.grid_height // 2))
 
                     elif self.last_round_coin_taken_by_others[agent_idx] < self.world.agents[agent_idx].coin_taken_by_others:
-                        text = self.font.render(f"{self.COIN_MISMATCH_PUNISHMENT}", True, COINS_FEEDBACK_COLORS[2])  # penalty
+                        text = self.font.render(f"{self.COIN_MISMATCH_PUNISHMENT}", True, COINS_FEEDBACK_COLORS[2])
                         self.last_round_coin_taken_by_others[agent_idx] = self.world.agents[agent_idx].coin_taken_by_others
                         self.screen.blit(text, (robot_center[0] - 10, robot_center[1] - self.grid_height // 2))
 
-                    # --- Optional movement arrow ---
+
                     if hasattr(self, "current_dilemma_action"):
                         move = self.current_dilemma_action[agent_idx]
                         if isinstance(move, (tuple, list)) and isinstance(move[0], int):
@@ -560,7 +511,7 @@ class CoinGameEnv(AECEnv):
                                     self.screen, self.agent_colors[agent_idx][:3],
                                     robot_center, (end_x, end_y), width=2
                                 )
-                                # Arrowhead
+
                                 angle = math.atan2(dy, dx)
                                 head_len = 6
                                 left = (
@@ -573,24 +524,21 @@ class CoinGameEnv(AECEnv):
                                 )
                                 pygame.draw.polygon(self.screen, self.agent_colors[agent_idx][:3],
                                                     [left, right, (end_x, end_y)])
-                                
 
     def _get_rgb_array(self):
-        arr = pygame.surfarray.array3d(self.screen)  # Use the offscreen surface
-        return np.transpose(arr, (1, 0, 2))  # Convert (W, H, C) -> (H, W, C)
-    
+        arr = pygame.surfarray.array3d(self.screen)
+        return np.transpose(arr, (1, 0, 2))
 
     def _generate_robot_surface(self, color, size=None):
-        """Create a pixel-style robot avatar surface."""
         size = size or (self.grid_width, self.grid_height)
         surf = pygame.Surface(size, pygame.SRCALPHA)
         w, h = size
 
-        # Robot body
+
         body_rect = pygame.Rect(w * 0.2, h * 0.2, w * 0.6, h * 0.6)
         pygame.draw.rect(surf, color, body_rect)
 
-        # Eyes (black squares)
+
         eye_size = w // 6
         eye_x1 = int(w * 0.3)
         eye_x2 = int(w * 0.6)
@@ -598,13 +546,13 @@ class CoinGameEnv(AECEnv):
         pygame.draw.rect(surf, (0, 0, 0), (eye_x1, eye_y, eye_size, eye_size))
         pygame.draw.rect(surf, (0, 0, 0), (eye_x2, eye_y, eye_size, eye_size))
 
-        # Arms
+
         arm_w = w * 0.15
         arm_h = h * 0.3
         pygame.draw.rect(surf, color, (0, h * 0.35, arm_w, arm_h))
         pygame.draw.rect(surf, color, (w - arm_w, h * 0.35, arm_w, arm_h))
 
-        # Legs
+
         leg_w = w * 0.2
         leg_h = h * 0.2
         pygame.draw.rect(surf, color, (w * 0.25, h - leg_h, leg_w, leg_h))

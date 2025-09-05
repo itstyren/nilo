@@ -158,7 +158,7 @@ class DilemmaPolicy(basePolicy):
             for module, gain in module_gains.items():
                 module.apply(partial(self.init_weights, gain=gain))
 
-        self.optimizer = self.optimizer_class(self.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)  # type: ignore[call-arg]
+        self.optimizer = self.optimizer_class(self.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
 
     def init_weights(self, module: nn.Module, gain: float = 1) -> None:
         pass
@@ -195,7 +195,7 @@ class DilemmaPolicy(basePolicy):
         mean_actions = self.action_net(latent_pi)
         return F.softmax(mean_actions, dim=-1)
 
-    def extract_features(  # type: ignore[override]
+    def extract_features(
         self,
         obs: PyTorchObs,
         features_type: str = "pi",
@@ -374,7 +374,6 @@ class DilemmaPolicy(basePolicy):
         return all_possible_values, selected_probs
 
 
-
     def get_action_and_prob(
         self, obs: PyTorchObs, deterministic: bool = False
     ) -> torch.Tensor:
@@ -385,7 +384,6 @@ class DilemmaPolicy(basePolicy):
             actions_prob = self._get_action_logits(latent_pi)
             actions = distribution.get_actions(deterministic=deterministic)
         return actions, actions_prob
-
 
 
 class DilemmaCnnPolicy(DilemmaPolicy):

@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, Any, Callable, NamedTuple, Optional, Protocol,
 import torch as th
 
 
-
 class CustomRolloutBufferSamples(NamedTuple):
     observations: th.Tensor
     actions: th.Tensor
@@ -69,7 +68,6 @@ class CustomRolloutBuffer(RolloutBuffer):
         self.last_repu_obs_shape = (num_agents,) + last_repu_obs_shape
         self.last_dilemma_vale_obs_shape = last_dilemma_vale_obs_shape
 
-        
 
         if self.buffer_type == 'dilemma':
             self.obs_shape = (num_recipients,) + self.obs_shape if num_recipients!=None else self.obs_shape
@@ -86,9 +84,6 @@ class CustomRolloutBuffer(RolloutBuffer):
         self.reset()
 
     def reset(self) -> None:
-        """
-        extend all list think agent may interact with more then one agent
-        """
         if self.buffer_type == 'reputation':
             if self._num_recipients != None:
                 self.recipients_index = np.zeros(
@@ -99,10 +94,9 @@ class CustomRolloutBuffer(RolloutBuffer):
                 self.recipients_index = np.zeros(
                     (self.buffer_size, self.n_envs), dtype=np.float32
                 )
-            
         self.buffer_size = self.original_buffer_size
-        # observations store current repu info when do dilemma action
-        # use for update repu during dilemma training
+
+
         self.observations = np.zeros(
             (self.buffer_size, self.n_envs, *self.obs_shape), dtype=np.float32
         )
@@ -180,21 +174,10 @@ class CustomRolloutBuffer(RolloutBuffer):
         last_repu_observations: np.ndarray = np.array([]),
         last_dilemma_value_observations: np.ndarray = np.array([]),
     ) -> None:
-        """
-        :param obs: Observation
-        :param action: Action
-        :param reward:
-        :param episode_start: Start of episode signal.
-        :param value: estimated value of the current state
-            following the current policy.
-        :param log_prob: log probability of the action
-            following the current policy.
-        """
 
         if len(log_prob.shape) == 0:
-            # Reshape 0-d tensor to avoid error
+
             log_prob = log_prob.reshape(-1, 1)
-        # Reshape to handle multi-dim and discrete action spaces, see GH #970 #1392
 
 
         action = action.reshape((self.n_envs, self.action_dim))
@@ -206,7 +189,6 @@ class CustomRolloutBuffer(RolloutBuffer):
 
         self.last_dilemma_value_observations[self.pos] = np.array(
             last_dilemma_value_observations) if len(last_dilemma_value_observations) > 0 else None
-        
         self.actions[self.pos] = np.array(action)
         self.rewards[self.pos] = np.array(reward)
         self.episode_starts[self.pos] = np.array(episode_start)
@@ -222,12 +204,8 @@ class CustomRolloutBuffer(RolloutBuffer):
             self.full = True
 
 
-
     def remove_current_pos(self):
-        """
-        Removes all content at the current position and reduces buffer_size by 1.
-        """
-        # breakpoint()
+
         if self.pos < self.buffer_size:
             self.observations[self.pos] = None
             self.actions[self.pos] = None
@@ -237,7 +215,7 @@ class CustomRolloutBuffer(RolloutBuffer):
             self.recipient_actions[self.pos] = None
             self.log_probs[self.pos] = None
 
-        # Shift the remaining elements to fill the gap
+
         self.observations = np.delete(self.observations, self.pos, axis=0)
         self.actions = np.delete(self.actions, self.pos, axis=0)
         self.rewards = np.delete(self.rewards, self.pos, axis=0)
@@ -249,48 +227,27 @@ class CustomRolloutBuffer(RolloutBuffer):
         self.advantages = np.delete(self.advantages, self.pos, axis=0)
         self.returns = np.delete(self.returns, self.pos, axis=0)
 
-        # Reduce buffer size by 1
+
         self.buffer_size -= 1
 
-        # Adjust position pointer
+
         if self.pos >= self.buffer_size:
             self.pos = max(0, self.buffer_size - 1)
 
-        # Adjust full flag
+
         if self.pos < self.buffer_size:
             self.full = False
-        # breakpoint()
+
 
     def update_episode_start(self, episode_start: np.ndarray) -> None:
-        """
-        Update the episode_start for the current timestep
-        """
         self.episode_starts[self.pos - 1] = np.array(episode_start)
 
     def compute_returns_and_advantage(self, last_values: torch.Tensor, dones: np.ndarray) -> None:
-        """
-        Post-processing step: compute the lambda-return (TD(lambda) estimate)
-        and GAE(lambda) advantage.
-
-        Uses Generalized Advantage Estimation (https://arxiv.org/abs/1506.02438)
-        to compute the advantage. To obtain Monte-Carlo advantage estimate (A(s) = R - V(S))
-        where R is the sum of discounted reward with value bootstrap
-        (because we don't always have full episode), set ``gae_lambda=1.0`` during initialization.
-
-        The TD(lambda) estimator has also two special cases:
-        - TD(1) is Monte-Carlo estimate (sum of discounted rewards)
-        - TD(0) is one-step estimate with bootstrapping (r_t + gamma * v(s_{t+1}))
-
-        For more information, see discussion in https://github.com/DLR-RM/stable-baselines3/pull/375.
-
-        :param last_values: state value estimation for the last step (one for each env)
-        :param dones: if the last step was a terminal step (one bool for each env).
-        """
 
         last_gae_lam = 0
-        # iterate over reversed range (from the last one)
+
         for step in reversed(range(self.buffer_size)):
-            # last rollouts setp, enter first
+
             if step == self.buffer_size - 1:
                 next_non_terminal = 1.0 - dones.astype(np.float32)
                 next_values = last_values
@@ -300,20 +257,20 @@ class CustomRolloutBuffer(RolloutBuffer):
             extended_next_non_terminal = np.expand_dims(
                 next_non_terminal, axis=1
             ).repeat(next_values.shape[1], axis=1)
-            # delta = r + gamma * V(s') - V(s)
+
             delta = (
                 self.rewards[step]
                 + self.gamma * next_values * extended_next_non_terminal
                 - self.values[step]
             )
 
-            # Advantage = delta + gamma * gae_lambda * next_non_terminal * Advantage
+
             last_gae_lam = (
                 delta + self.gamma * self.gae_lambda * extended_next_non_terminal * last_gae_lam
             )
             self.advantages[step] = last_gae_lam
-        # TD(lambda) estimator, see Github PR #375 or "Telescoping in TD(lambda)"
-        # in David Silver Lecture 4: https://www.youtube.com/watch?v=PnHCvfgC_ZA
+
+
         self.returns = self.advantages + self.values
 
     def compute_td0_returns(self, last_values: torch.Tensor, dones: np.ndarray) -> None:
@@ -347,29 +304,11 @@ class CustomRolloutBuffer(RolloutBuffer):
 
 
     def compute_returns_and_advantage_coin_game(self, last_values: torch.Tensor, dones: np.ndarray) -> None:
-        """
-        Post-processing step: compute the lambda-return (TD(lambda) estimate)
-        and GAE(lambda) advantage.
-
-        Uses Generalized Advantage Estimation (https://arxiv.org/abs/1506.02438)
-        to compute the advantage. To obtain Monte-Carlo advantage estimate (A(s) = R - V(S))
-        where R is the sum of discounted reward with value bootstrap
-        (because we don't always have full episode), set ``gae_lambda=1.0`` during initialization.
-
-        The TD(lambda) estimator has also two special cases:
-        - TD(1) is Monte-Carlo estimate (sum of discounted rewards)
-        - TD(0) is one-step estimate with bootstrapping (r_t + gamma * v(s_{t+1}))
-
-        For more information, see discussion in https://github.com/DLR-RM/stable-baselines3/pull/375.
-
-        :param last_values: state value estimation for the last step (one for each env)
-        :param dones: if the last step was a terminal step (one bool for each env).
-        """
 
         last_gae_lam = 0
-        # iterate over reversed range (from the last one)
+
         for step in reversed(range(self.buffer_size)):
-            # last rollouts setp, enter first
+
             if step == self.buffer_size - 1:
                 next_non_terminal = 1.0 - dones.astype(np.float32)
                 next_values = last_values
@@ -377,39 +316,28 @@ class CustomRolloutBuffer(RolloutBuffer):
                 next_non_terminal = 1.0 - self.episode_starts[step + 1]
                 next_values = self.values[step + 1]
 
-            # delta = r + gamma * V(s') - V(s)
+
             delta = (
                 self.rewards[step]
                 + self.gamma * next_values * next_non_terminal
                 - self.values[step]
             )
 
-            # Advantage = delta + gamma * gae_lambda * next_non_terminal * Advantage
+
             last_gae_lam = (
                 delta + self.gamma * self.gae_lambda * next_non_terminal * last_gae_lam
             )
             self.advantages[step] = last_gae_lam
-        # TD(lambda) estimator, see Github PR #375 or "Telescoping in TD(lambda)"
-        # in David Silver Lecture 4: https://www.youtube.com/watch?v=PnHCvfgC_ZA
+
+
         self.returns = self.advantages + self.values
-
-
 
 
     def get(self, batch_size: Optional[int] = None) -> Generator[CustomRolloutBufferSamples, None, None]:
         assert self.full, ""
         indices = np.random.permutation(self.buffer_size * self.n_envs)
 
-        # if self.buffer_type == 'dilemma':
-        #     # print(self.observations.shape)
-        #     # print("buffer type is dilemma ", self.buffer_index)
-        #     # print(self.observations[6])
-        #     # print(self.last_repu_observations.shape)
-        #     # print(self.last_repu_observations[6][:,self.buffer_index,:])
-        #     breakpoint()
-            
 
-        # Prepare the data
         if not self.generator_ready:
             _tensor_names = [
                 "observations",
@@ -430,7 +358,7 @@ class CustomRolloutBuffer(RolloutBuffer):
                     self.__dict__[tensor])
             self.generator_ready = True
 
-        # Return everything, don't create minibatches
+
         if batch_size is None:
             batch_size = self.buffer_size * self.n_envs
 
@@ -463,8 +391,8 @@ class CustomRolloutBuffer(RolloutBuffer):
 
 class DictRolloutBuffer(CustomRolloutBuffer):
     observation_space: spaces.Dict
-    obs_shape: dict[str, tuple[int, ...]]  # type: ignore[assignment]
-    observations: dict[str, np.ndarray]  # type: ignore[assignment]
+    obs_shape: dict[str, tuple[int, ...]]
+    observations: dict[str, np.ndarray]
 
     def __init__(
         self,

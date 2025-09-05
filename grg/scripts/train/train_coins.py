@@ -14,10 +14,6 @@ import supersuit as ss
 from grg.envs.coin_game.cg_wrappers import DummyVecEnv,SubprocVecEnv
 
 def make_run_env(all_args, raw_env, env_type=0):
-    """
-    make train or eval env
-    :param evn_type: wether env for training (0) or eval (1). Setting differnt seed
-    """
 
     def get_env_fn(rank):
         def init_env():
@@ -40,7 +36,6 @@ def make_run_env(all_args, raw_env, env_type=0):
         return DummyVecEnv([get_env_fn(0)])
     else:
         return SubprocVecEnv([get_env_fn(i) for i in range(rollout_threads)])
-    
 
 
 device = torch.device(
@@ -52,7 +47,7 @@ if __name__ == "__main__":
     multiprocessing.set_start_method("forkserver", force=True)
 
     parser = get_config()
-    # parse command-line arguments and pre-set argument from config.py
+
     parsed_args = parser.parse_known_args(sys.argv[1:])[0]
     all_args = update_config(parsed_args)
 
@@ -77,14 +72,13 @@ if __name__ == "__main__":
         )
         / all_args.project_name
         / all_args.scenario_name
-        / all_args.substrate_name  # sepecify which substrate to run on
+        / all_args.substrate_name
         / all_args.algorithm_name
     )
     if not run_dir.exists():
         os.makedirs(str(run_dir))
 
     running_substrate = utils.extract_scenarios(all_args.substrate_name)
-    
     if all_args.use_wandb:
         job_name = f"{running_substrate}_{all_args.algorithm_name}"
         run_name = f"G{all_args.group_num}N{all_args.num_recipients}_dim{all_args.env_dim}_{all_args.norm_type}[{all_args.seed}]"
@@ -98,21 +92,20 @@ if __name__ == "__main__":
             job_type=job_name,
             group=all_args.scenario_name,
             sync_tensorboard=True,)
-        
         wandb.define_metric("render_video", step_metric="Episodes",step_sync=True)
         wandb.define_metric('Steps')
         wandb.define_metric("*", step_metric="Steps",step_sync=True)
     else:
-        # Generate a run name based on the current timestamp
+
         current_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         curr_run = f"run_{current_time}"
 
-        # Create the full path for the new run directory
+
         run_dir = run_dir / curr_run
         if not run_dir.exists():
             os.makedirs(str(run_dir))
 
-    # Set the process title to the run name
+
     setproctitle.setproctitle(
         str(all_args.algorithm_name)
         + "-"
@@ -125,7 +118,6 @@ if __name__ == "__main__":
     )          
 
 
-    # seed
     torch.manual_seed(all_args.seed)
     torch.cuda.manual_seed_all(all_args.seed)
     np.random.seed(all_args.seed)
@@ -157,6 +149,5 @@ if __name__ == "__main__":
 
     if all_args.use_render:
         eval_env.close()
-    
     if all_args.use_wandb:
         wandb.finish()    

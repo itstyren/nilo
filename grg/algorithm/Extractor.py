@@ -10,9 +10,9 @@ class CnnGRUExtractor(BaseFeaturesExtractor):
     def __init__(
         self,
         observation_space: gym.Space,
-        features_dim: int = 16,           # Final output matches table
-        gru_hidden_size: int = 16,        # GRU size from table
-        gru_num_layers: int = 1,          # GRU layers from table
+        features_dim: int = 16,
+        gru_hidden_size: int = 16,
+        gru_num_layers: int = 1,
     ) -> None:
         assert isinstance(observation_space, spaces.Box), (
             "CoinsCnnGRUExtractor must be used with a gym.spaces.Box ",
@@ -23,7 +23,7 @@ class CnnGRUExtractor(BaseFeaturesExtractor):
         n_input_channels = observation_space.shape[0]
 
         self.cnn = nn.Sequential(
-            nn.Conv2d(n_input_channels, 16, kernel_size=3, stride=1),  # expect small spatial dims
+            nn.Conv2d(n_input_channels, 16, kernel_size=3, stride=1),
             nn.ReLU(),
             nn.Conv2d(16, 16, kernel_size=1, stride=1),
             nn.ReLU(),
@@ -50,6 +50,6 @@ class CnnGRUExtractor(BaseFeaturesExtractor):
         batch_size = observations.size(0)
         cnn_out = self.cnn(observations)
         flat = cnn_out.view(batch_size, -1)
-        gru_input = flat.unsqueeze(1)  # seq_len = 1
+        gru_input = flat.unsqueeze(1)
         gru_out, _ = self.gru(gru_input)
         return self.linear(gru_out[:, -1, :])

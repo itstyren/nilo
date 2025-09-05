@@ -12,16 +12,11 @@ import grg.utils.tools as utils
 from stable_baselines3.common.utils import get_schedule_fn
 import imageio
 from PIL import Image
-from tqdm import tqdm  # Add this at the top
+from tqdm import tqdm
 import os
 
 
 class CoinGamenner(BaseRunner):
-    """
-    Runner class for pairwise training
-
-    :param n_steps: The number of steps to run for each environment per update
-    """
 
     def __init__(self, config):
         super(CoinGamenner, self).__init__(config)
@@ -33,9 +28,6 @@ class CoinGamenner(BaseRunner):
         self.continue_training = True
 
     def run(self):
-        """
-        Run the training and evaluation loop
-        """
         self._warmup()
 
         iteration_episode = 0
@@ -43,18 +35,18 @@ class CoinGamenner(BaseRunner):
 
         while self.num_timesteps < self._total_timesteps:
             continue_training = self.collect_rollouts(self.envs, self.n_steps)
-            # print('collect rollouts')
+
 
             if not continue_training:
                 break
 
             iteration_episode += self.n_rollout_threads
             roullout_count += 1
-            # pass to all trainers
+
             progress_remaining = self._update_current_progress_remaining(
                 self.num_timesteps, self._total_timesteps
             )
-            # Display training information
+
             if roullout_count % self._log_interval == 0:
                 assert self.ep_info_buffer is not None
                 self._dump_logs(iteration_episode)
@@ -63,7 +55,7 @@ class CoinGamenner(BaseRunner):
                 roullout_count % self._save_interval == 0
                 or iteration_episode == self._total_episodes - 1
             ):
-                # Save the model
+
                 self.save_model()
 
             if (
@@ -71,18 +63,15 @@ class CoinGamenner(BaseRunner):
                 and self.eval_env is not None
                 and roullout_count % self._render_interval == 0
             ):
-                # Render the environment
+
                 self.render(iteration_episode)
 
             self.train_agent_policy(progress_remaining)
 
     def _warmup(self):
-        """
-        Warmup the environment
-        """
         if self._last_dilemma_obs is None:
             assert self.envs is not None, "Environment is not initialized"
-            # reset the environment
+
             initial_obs = self.envs.reset()
             dilemma_obs = self.process_obs_to_specific_usage(initial_obs, "dilemma_obs")
             repu_obs = self.process_obs_to_specific_usage(initial_obs, "repu_obs")
@@ -95,49 +84,38 @@ class CoinGamenner(BaseRunner):
 
             self._last_episode_starts = np.ones((self.envs.num_envs,), dtype=bool)
 
-        # total episode number
+
         self._total_episodes = int(self._total_timesteps) // self.episode_length
 
-        # current timesteps within the single thread
+
         self._internal_timesteps = 0
 
     def collect_rollouts(self, env: VecEnv, n_rollout_steps: int) -> bool:
-        """
-        Collect experiences using the current policy and fill a ``RolloutBuffer``.
-
-        :param env: The training environment
-        :param n_rollout_steps: The number of rollout steps per update
-
-        :return: True if function returned with at least `n_rollout_steps`
-            collected, False if callback terminated rollout prematurely.
-        """
         assert (
             self._last_dilemma_obs is not None
         ), "No previous observation was provided"
-        # Switch to eval mode (this affects batch norm / dropout)
+
 
         n_steps = 0
-        # set training mode to False
-        # set the buffer to reset
+
+
         for agent_idx in range(self.num_agents):
             self.dilemma_trainers[agent_idx].policy.set_training_mode(False)
             self.repu_trainers[agent_idx].policy.set_training_mode(False)
             self.dilemma_buffers[agent_idx].reset()
             self.repu_buffers[agent_idx].reset()
 
-        # Create an array of roullout env indices
-        # batch_indices = np.arange(self.n_rollout_threads)[:, np.newaxis]
+
         batch_indices = np.arange(self.n_rollout_threads)
         while n_steps < n_rollout_steps:
-            # Get the dilemma action
+
             dilemma_actions, dilemma_values, dilemma_log_probs = self.get_action(
                 action_type="dilemma"
             )
-            # print(self._last_dilemma_obs[0][0])
+
             updated_obs, rewards, _, truncations, dilemma_infos = env.step(
                 dilemma_actions, action_type="dilemma"
             )
-           
             agent_recipients_dilemma_actions = self.get_other_agents_actions(
                 dilemma_actions
             )
@@ -146,16 +124,16 @@ class CoinGamenner(BaseRunner):
                     dilemma_actions, agent_recipients_dilemma_actions
                 )
 
-            # use obs after dilemma action to evaluate reputation
+
             repu_obs = self.process_obs_to_specific_usage(updated_obs, "repu_obs")
 
             _dilemma_recipients_idx = np.array(
                 [info["agent_recipients_idx"] for info in dilemma_infos]
             )
-            # get reputation obs after dilemma action
+
             self._last_repu_obs = repu_obs.copy()
 
-            # Get the reputation action
+
             if self.norm_pattern == "RL" or self.norm_pattern == "attention":
                 repu_actions, repu_values, repu_log_probs = self.get_action(
                     action_type="reputation"
@@ -182,37 +160,31 @@ class CoinGamenner(BaseRunner):
                 dtype=object,
             )
 
-            # normalized_repu_actions = (clipped_repu_actions - clipped_repu_actions.mean()) / (clipped_repu_actions.std() + 1e-8)
-
-            # normalized_repu_actions=normalized_repu_actions.mean(axis=1).reshape(1,2,1)
-
-            # rewards+=normalized_repu_actions
 
             self._update_info_buffer(combined_infos)
 
-            # if the episode is done, the env will be reset in this if statement
+
             if repu_infos[0]["epsidoe_end"]:
-                # get the terminal observation after last reputation action
+
                 dilemma_terminal_obs = self.process_obs_to_specific_usage(
                     next_dilemma_obs, "dilemma_obs"
                 )
                 dilemma_terminal_actions, _, _ = self.get_action(
                     action_type="dilemma", obs=dilemma_terminal_obs
                 )
-                # env reset here
+
                 new_episide_obs, _, _, truncations, terminal_infos = env.step(
                     dilemma_terminal_actions, action_type="dilemma"
                 )
-                # get the recipient action for the last dilemma action
+
                 agent_recipients_dilemma_actions = self.get_other_agents_actions(
                     dilemma_actions
                 )
 
-                # get terminal observation after last dilemma action
+
                 terminal_obs = np.array(
                     [info["terminal_observation"] for info in terminal_infos]
                 )
-     
                 dilemma_terminal_values = self.get_dilemma_value(
                     dilemma_terminal_actions,
                     agent_recipients_dilemma_actions,
@@ -222,13 +194,8 @@ class CoinGamenner(BaseRunner):
                 repu_terminal_obs = self.process_obs_to_specific_usage(
                     terminal_obs, "repu_obs"
                 )
-                # repu_terminal_values = self.get_repu_value(
-                #     repu_actions, repu_obs=repu_terminal_obs
-                # )
 
-                # repu_terminal_values = np.take_along_axis(
-                #     repu_terminal_values, _dilemma_recipients_idx, axis=2
-                # )
+
                 rewards += self.gamma * dilemma_terminal_values
                 if self.repu_value_flag == "return":
                     repu_terminal_values = self.get_repu_value(
@@ -239,20 +206,20 @@ class CoinGamenner(BaseRunner):
                     )
                     repu_rewards += self.gamma * repu_terminal_values
 
-            # if self._finish_first_dilemma:
+
             for agent_idx in range(self.num_agents):
-                # get the recipient index for current agent
+
                 recipient_idx = _dilemma_recipients_idx[:, agent_idx]
-                # add last round repu info and this round dilemma reward to the bufferb
+
                 self.repu_buffers[agent_idx].add(
-                    # here repu obse haven't been update
-                    # self._last_last_repu_obs[:, agent_idx],
+
+
                     self._last_repu_obs[:, agent_idx],
-                    # self._last_repu_obs[:, agent_idx],  # here repu obse haven't been update
-                    # self._last_repu_actions[:, agent_idx],
+
+
                     repu_actions[:, agent_idx],
-                    # use just received rewards
-                    # use just received rewards
+
+
                     repu_rewards[:, agent_idx],
                     self._last_episode_starts,
                     repu_values[:, agent_idx][batch_indices, recipient_idx],
@@ -264,38 +231,7 @@ class CoinGamenner(BaseRunner):
                     ] if self.baseline_type != "NL" else [],
                 )
 
-                # self.repu_buffers[agent_idx].add(
-                #     # here repu obse haven't been update
-                #     self._last_last_repu_obs[:, agent_idx],
-                #     # self._last_repu_obs[:, agent_idx],
-                #     # self._last_repu_obs[:, agent_idx],  # here repu obse haven't been update
-                #     self._last_repu_actions[:, agent_idx],
-                #     # repu_actions[:, agent_idx],
-                #     # use just received rewards
-                #     # self._last_repu_rewards[:, agent_idx],
-                #     repu_rewards[:, agent_idx],
-                #     self._last_last_episode_starts,
-                #     self._last_repu_values[:, agent_idx][
-                #         batch_indices, recipient_idx
-                #     ],
-                #     self._last_repu_log_probs[:, agent_idx],
-                #     recipients_index=recipient_idx,
-                #     last_repu_observations=self._last_repu_obs[:, agent_idx].copy(
-                #     ),
-                #     # last_dilemma_value_observations=self._last_dilemma_value_obs[:, agent_idx],
-                # )
 
-                # # print('current step:',n_steps)
-                # if repu_infos[0]["epsidoe_end"]:
-                #     # print('env reset')
-                #     self._finish_first_dilemma = False
-            # else:
-            #     # print('delete one at ',n_steps)
-            #     # else means last round is the firsst setp of reset env
-            #     self._finish_first_dilemma = True
-            #     for agent_idx in range(self.num_agents):
-            #         self.repu_buffers[agent_idx].remove_current_pos()
-            # print(n_steps)
             for agent_idx in range(self.num_agents):
                 self.dilemma_buffers[agent_idx].add(
                     self._last_dilemma_obs[:, agent_idx],
@@ -331,7 +267,7 @@ class CoinGamenner(BaseRunner):
 
         last_repu_value = []
         with torch.no_grad():
-            # compute the last value for the last timestep
+
 
             last_dilemma_actions, _, _ = self.get_action(action_type="dilemma")
             _, _, _, _, last_dilemma_infos = env.step(
@@ -352,17 +288,17 @@ class CoinGamenner(BaseRunner):
 
         last_dilemma_values = np.array(last_dilemma_values)
         last_repu_value = np.array(last_repu_value)
-        # compute the return and advantage for dilemma and reputation
+
         for agent_idx in range(self.num_agents):
-            # self.dilemma_buffers[agent_idx].compute_returns_and_advantage_coin_game(
+
             self.dilemma_buffers[agent_idx].compute_td0_returns_coin_game(
-                # last_dilemma_values[agent_idx, :], dones=truncations
+
                 last_dilemma_values[:, agent_idx],
                 dones=truncations,
             )
 
             if self.dilemma_train_freq != 1 and self.repu_value_flag == "return":
-                # self.repu_buffers[agent_idx].compute_td0_returns(
+
                 self.repu_buffers[agent_idx].compute_returns_and_advantage_coin_game(
                     last_repu_value[agent_idx, :],
                     dones=truncations,
@@ -370,9 +306,6 @@ class CoinGamenner(BaseRunner):
         return True
 
     def process_obs_to_specific_usage(self, obs, usage_type, mode="train"):
-        """
-        Process the observation to get the reputation usage
-        """
         n_rollout_threads = (
             self.n_rollout_threads if mode == "train" else self.n_eval_rollout_threads
         )
@@ -387,9 +320,6 @@ class CoinGamenner(BaseRunner):
         return np.array(obs_set.tolist(), dtype=np.float64)
 
     def get_action(self, action_type="dilemma", obs=None, mode="train"):
-        """
-        Get one step action for all agents
-        """
         action_set, value_set, log_probs_set = [], [], []
         action_dim = 1 if action_type == "dilemma" else -1
         value_dim = -1
@@ -413,7 +343,6 @@ class CoinGamenner(BaseRunner):
             with torch.no_grad():
                 agent_obs = _last_obs[:, agent_idx]
 
-                # obs_tensor = obs_as_tensor(agent_obs, self.device)
 
                 if action_type == "reputation":
                     if self.norm_pattern == "RL":
@@ -448,7 +377,6 @@ class CoinGamenner(BaseRunner):
                         )
                 else:
                     obs_tensor = obs_as_tensor(agent_obs, self.device)
-                
 
 
                 actions, values, log_probs = trainer[agent_idx].policy.forward(
@@ -463,11 +391,6 @@ class CoinGamenner(BaseRunner):
                     actions = actions.squeeze(1)
 
 
-
-                # if action_type == "dilemma":
-                #     breakpoint()
-            # if action_type == "reputation":
-            #     breakpoint()
             actions = utils.t2n(actions, n_rollout_threads, action_dim)
             log_probs = utils.t2n(log_probs, n_rollout_threads, action_dim)
             if self.baseline_type == "NL" and action_type == "dilemma":
@@ -479,7 +402,7 @@ class CoinGamenner(BaseRunner):
                 else np.array(values)
             )
 
-            # not need to clip dilemma action
+
             if action_type == "dilemma":
                 action_set.append(actions.astype(int).tolist())
             else:
@@ -499,15 +422,10 @@ class CoinGamenner(BaseRunner):
         recipients_dilemma_actions,
         dilemma_obs=None,
     ):
-        """
-        Get the value of the dilemma action
-        """
-        # Use the last observed dilemma if none provided
+
         dilemma_obs = self._last_dilemma_obs if dilemma_obs is None else dilemma_obs
 
-        # One-hot encode
-        # dilemma_action_one_hot = np.eye(self.action_space['dilemma'].n)[dilemma_actions.squeeze(-1)]  # shape will be (n,2,5)
-        # recipients_dilemma_actions_one_hot = np.eye(self.action_space['dilemma'].n)[recipients_dilemma_actions.squeeze(-1)]  # shape will be (n,2,5)
+
         normalized_agent_actions = dilemma_actions / self.max_dilemma_action_value
         normalized_recipients_actions = (
             recipients_dilemma_actions / self.max_dilemma_action_value
@@ -515,7 +433,7 @@ class CoinGamenner(BaseRunner):
 
         dilemma_obs_expand = np.repeat(dilemma_obs[..., np.newaxis], 2, axis=-1)
 
-        # Step 1: create mask where all five elements are 1
+
         for bath_indx in range(dilemma_obs.shape[0]):
             for agent_index in range(dilemma_obs.shape[1]):
                 agent_position = np.argwhere(
@@ -544,10 +462,8 @@ class CoinGamenner(BaseRunner):
                     agent_obs = dilemma_obs_expand[
                         :, agent_idx
                     ] 
-                
-  
-                    # Select agent-specific observations
-                    # Convert to tensor using agent's policy method
+
+
                     critic_obs_tensor = self.dilemma_trainers[
                         agent_idx
                     ].policy.obs_to_tensor(
@@ -560,151 +476,26 @@ class CoinGamenner(BaseRunner):
                     agent_obs=dilemma_obs[:, agent_idx]
                     critic_obs_tensor=self.dilemma_trainers[agent_idx].policy.obs_to_tensor(
                         agent_obs, observation_type="value_pred")[0]
-                # critic_obs_tensor = self.dilemma_trainers[
-                #     agent_idx
-                # ].policy.obs_to_tensor(
-                #     np.concatenate(agent_obs).reshape(np.concatenate(
-                #         agent_obs).shape[0], np.concatenate(agent_obs).shape[1], -1),
-                #     observation_type="value_pred",
-                # )[
-                #     0
-                # ]
-                # Predict value
+
+
                 values = self.dilemma_trainers[agent_idx].policy.predict_values(
                     critic_obs_tensor
                 )
             values = values.squeeze(1)
-            # Convert tensor to numpy
+
             values = utils.t2n(values, self.n_rollout_threads)
             value_set.append(values)
         return np.stack(value_set, axis=1)
 
-    # def get_dilemma_value(
-    #     self,
-    #     dilemma_actions,
-    #     recipients_dilemma_actions,
-    #     dilemma_obs=None,
-    # ):
-    #     """
-    #     Get the value of the dilemma action
-    #     """
-    #     # Use the last observed dilemma if none provided
-    #     dilemma_obs = self._last_dilemma_obs if dilemma_obs is None else dilemma_obs
-
-    #     # One-hot encode
-    #     dilemma_action_one_hot = np.eye(self.action_space['dilemma'].n)[dilemma_actions.squeeze(-1)]  # shape will be (n,2,5)
-    #     recipients_dilemma_actions_one_hot = np.eye(self.action_space['dilemma'].n)[recipients_dilemma_actions.squeeze(-1)]  # shape will be (n,2,5)
-
-    #     extended_obs=np.concatenate([dilemma_obs,dilemma_action_one_hot,recipients_dilemma_actions_one_hot],axis=2)
-
-    #     value_set = []
-
-    #     for agent_idx in range(self.num_agents):
-    #         with torch.no_grad():
-    #             agent_obs = extended_obs[
-    #                 :, agent_idx
-    #             ]  # Select agent-specific observations
-    #             # Convert to tensor using agent's policy method
-    #             critic_obs_tensor = self.dilemma_trainers[
-    #                 agent_idx
-    #             ].policy.obs_to_tensor(
-    #                 np.concatenate(agent_obs),
-    #                 observation_type="value_pred",
-    #             )[
-    #                 0
-    #             ]
-
-    #             # Predict value
-    #             values = self.dilemma_trainers[agent_idx].policy.predict_values(
-    #                 critic_obs_tensor
-    #             )
-    #         # Convert tensor to numpy
-    #         values = utils.t2n(values, self.n_rollout_threads, -1)
-    #         value_set.append(values)
-    #     return np.stack(value_set, axis=1)
-
-    # def get_dilemma_value(
-    #     self,
-    #     dilemma_actions,
-    #     agent_recipients_dilemma_actions,
-    #     dilemma_obs=None,
-    # ):
-    #     """
-    #     Get the value of the dilemma action
-    #     """
-    #     # Use the last observed dilemma if none provided
-    #     dilemma_obs = self._last_dilemma_obs if dilemma_obs is None else dilemma_obs
-
-    #     # Normalize
-    #     normalized_dilemma_actions = dilemma_actions / self.max_dilemma_action_value
-    #     normalized_agent_recipients = (
-    #         agent_recipients_dilemma_actions / self.max_dilemma_action_value
-    #     )
-
-    #     batch_size, num_agents, channels, grid_h, grid_w = dilemma_obs.shape
-
-    #     # Normalize actions
-    #     normalized_dilemma_actions = dilemma_actions / self.max_dilemma_action_value  # (batch_size, num_agents, other agent actions)
-    #     normalized_agent_recipients = agent_recipients_dilemma_actions / self.max_dilemma_action_value
-
-    #     # Expand dimensions with broadcasting
-    #     normalized_dilemma_actions_expanded = np.broadcast_to(
-    #         normalized_dilemma_actions[:, :, :, None, None],
-    #         (batch_size, num_agents, 1, grid_h, grid_w)
-    #     )
-    #     normalized_agent_recipients_expanded = np.broadcast_to(
-    #         normalized_agent_recipients[:, :, :, None, None],
-    #         (batch_size, num_agents, 1, grid_h, grid_w)
-    #     )
-
-    #     # Create a new extended slice (batch_size, num_agents, 1, grid_h, grid_w)
-    #     extended_slice = np.zeros((batch_size, num_agents, 1, grid_h, grid_w), dtype=dilemma_obs.dtype)
-
-    #     # Fill rows
-    #     extended_slice[:, :, :, 0, :] = normalized_dilemma_actions_expanded[:, :, :, 0, :]
-    #     extended_slice[:, :, :, 1, :] = normalized_agent_recipients_expanded[:, :, :, 0, :]
-    #     # Row 2 remains zeros automatically
-
-    #     # Concatenate along the channel dimension
-    #     extended_obs = np.concatenate([dilemma_obs, extended_slice], axis=2)
-
-    #     value_set = []
-
-    #     for agent_idx in range(self.num_agents):
-    #         with torch.no_grad():
-    #             agent_obs = extended_obs[
-    #                 :, agent_idx
-    #             ]  # Select agent-specific observations
-    #             # Convert to tensor using agent's policy method
-    #             critic_obs_tensor = self.dilemma_trainers[
-    #                 agent_idx
-    #             ].policy.obs_to_tensor(
-    #                 np.concatenate(agent_obs),
-    #                 observation_type="value_pred",
-    #             )[
-    #                 0
-    #             ]
-
-    #             # Predict value
-    #             values = self.dilemma_trainers[agent_idx].policy.predict_values(
-    #                 critic_obs_tensor
-    #             )
-    #         # Convert tensor to numpy
-    #         values = utils.t2n(values, self.n_rollout_threads, -1)
-    #         value_set.append(values)
-    #     return np.stack(value_set, axis=1)
 
     def get_repu_value(
         self,
         repu_actions,
         repu_obs=None,
     ):
-        """
-        Get the value of the reputation action
-        """
         repu_obs = (
             self._last_repu_obs if repu_obs is None else repu_obs
-        )  # [batch,agent,obs_dim], e.g. (8, 16, 16, 1, 3)
+        )
         extended_obs = np.pad(
             repu_obs,
             pad_width=[(0, 0)] * 6 + [(0, 1)],
@@ -718,11 +509,10 @@ class CoinGamenner(BaseRunner):
                         obs_agent_idx
                     ][0]
 
-                    # Loop through all vectors and modify
-                    # iterate over first two dims (3, 3)
+
                     for idx in np.ndindex(agent_within_map.shape[:2]):
                         vec = agent_within_map[idx]
-                        if np.any(vec):  # skip all-zero vectors
+                        if np.any(vec):
 
                             if vec[-1] == 0:
                                 extended_obs[bath_indx, agent_index][obs_agent_idx][0][
@@ -735,120 +525,54 @@ class CoinGamenner(BaseRunner):
 
         with torch.no_grad():
             for agent_idx in range(self.num_agents):
-                # Select the interaction dimension properly
-                # (batch, agent, input_dim)
+
+
                 critic_obs = extended_obs[:, agent_idx, :, :]
                 obs_shape = (
                     *critic_obs.shape[-4:-2],
                     critic_obs.shape[-1] * critic_obs.shape[-1],
                 )
 
-                # (batch*agent, input_dim)
+
                 critic_obs = critic_obs.reshape(-1, *obs_shape)
                 critic_obs_tensor = self.repu_trainers[agent_idx].policy.obs_to_tensor(
                     critic_obs, observation_type="value_pred"
                 )[0]
 
-                # Predict values
+
                 values = self.repu_trainers[agent_idx].policy.predict_values(
                     critic_obs_tensor
                 )
 
-                # Convert to numpy
+
                 values = utils.t2n(values, self.n_rollout_threads, -1)
 
                 value_set.append(values)
 
         return np.stack(value_set, axis=1)
 
-    # def get_repu_value(
-    #     self,
-    #     repu_actions,
-    #     repu_obs=None,
-    # ):
-    #     """
-    #     Get the value of the reputation action
-    #     """
-    #     repu_obs = (
-    #         self._last_repu_obs if repu_obs is None else repu_obs
-    #     )  # [batch,agent,obs_dim], e.g. (8, 16, 16, 1, 3)
-
-    #     batch_size, num_agents, num_recipient,channel, grid_h, grid_w = repu_obs.shape
-
-    #     repu_actions_expanded=np.tile(repu_actions[:, :, :, None, None], (1, 1, 1, 1, 3, 3))
-
-    #     # # Flatten if needed
-    #     # if repu_obs.shape[3] != 1:
-    #     #     repu_obs = repu_obs.reshape(*repu_obs.shape[:3], 1, -1)  # Merge last two dims
-
-    #     # First, reshape repu_actions to match dimensions for concat
-    #     expanded_repu_actions = repu_actions[:, :, :, None, None, None]  # (1,2,2,1,1,1)
-    #     expanded_repu_actions = np.tile(expanded_repu_actions, (1, 1, 1, 1, 3, 3))  # (1,2,2,1,3,3)
-    #     breakpoint()
-
-    #     extended_repu_obs = np.concatenate(
-    #         [repu_obs, repu_actions_expanded], axis=3
-    #     )
-
-    #     # Preprocess all inputs for all agents at once
-    #     batch_size, num_agents, _, _, input_dim = extended_repu_obs.shape
-    #     extended_repu_obs_flat = extended_repu_obs.reshape(batch_size, num_agents, -1, input_dim)
-
-    #     value_set = []
-
-    #     with torch.no_grad():
-    #         for agent_idx in range(self.num_agents):
-    #             # Select the interaction dimension properly
-    #             critic_obs = extended_repu_obs_flat[:, agent_idx, :, :]  # (batch, agent, input_dim)
-    #             critic_obs = critic_obs.reshape(-1, critic_obs.shape[-1])  # (batch*agent, input_dim)
-    #             critic_obs_tensor = self.repu_trainers[agent_idx].policy.obs_to_tensor(
-    #                 critic_obs, observation_type="value_pred"
-    #             )[0]
-
-    #             # Predict values
-    #             values = self.repu_trainers[agent_idx].policy.predict_values(critic_obs_tensor)
-
-    #             # Convert to numpy
-    #             values = utils.t2n(values, self.n_rollout_threads, -1)
-
-    #             value_set.append(values)
-
-    #     return np.stack(value_set, axis=1)
 
     def get_other_agents_actions(self, dilemma_actions):
-        """
-        Get the individual actions of other agents for each agent.
-
-        Input:
-            dilemma_actions: (batch_size, num_agents, 1)
-        Output:
-            other_actions: (batch_size, num_agents, num_agents-1)
-        """
         batch_size, num_agents, _ = dilemma_actions.shape
 
-        # Remove last dimension
-        # (batch_size, num_agents)
+
         dilemma_actions = np.squeeze(dilemma_actions, axis=-1)
 
         other_actions = []
 
         for agent_idx in range(num_agents):
             mask = np.arange(num_agents) != agent_idx
-            # Select other agents' actions (without aggregation)
-            # (batch_size, num_agents-1)
+
+
             other_agent_actions = dilemma_actions[:, mask]
             other_actions.append(other_agent_actions)
 
-        # Stack along agent dimension
-        # (batch_size, num_agents, num_agents-1)
+
         other_actions = np.stack(other_actions, axis=1)
 
         return other_actions
 
     def train_agent_policy(self, progress_remaining):
-        """
-        Train either the reputation or dilemma trainers
-        """
         self.train_freq = self.dilemma_updates_freq_schedule(progress_remaining)
 
         if random.random() < self.train_freq:
@@ -856,14 +580,12 @@ class CoinGamenner(BaseRunner):
                 self.dilemma_trainers[agent_idx]._current_progress_remaining = (
                     progress_remaining
                 )
-                
-                # Standard case: pass reputation policy
+
                 dilemma_train_info = self.dilemma_trainers[agent_idx].train(
                     self.dilemma_buffers[agent_idx],
                     norm_pattern=self.repu_trainers[agent_idx].policy,
                     self_index=agent_idx,
                 )
-            
                 self.dilemma_train_info_buffer.extend([dilemma_train_info])
         else:
             for agent_idx in range(self.num_agents):
@@ -880,9 +602,6 @@ class CoinGamenner(BaseRunner):
                 self.repu_train_info_buffer.extend([repu_train_info])
 
     def _dump_logs(self, iteration_episode):
-        """
-        Dump logs
-        """
         assert self.ep_info_buffer is not None
 
         logger_info = {}
@@ -911,15 +630,8 @@ class CoinGamenner(BaseRunner):
                 fps,
             )
         )
-        # logger_info["results/coins_collected_per_step"] = safe_mean(
-        #     [ep_info["total_coins_collected"] for ep_info in self.ep_info_buffer]
-        # )
-        # logger_info["results/own_coin_collected_per_step"] = safe_mean(
-        #     [ep_info["own_coin_collected"] for ep_info in self.ep_info_buffer]
-        # )
-        # logger_info["results/coin_taken_by_others_per_step"] = safe_mean(
-        #     [ep_info["coin_taken_by_others"] for ep_info in self.ep_info_buffer]
-        # )
+
+
         logger_info["results/coin_taken_by_others_episode"] = np.sum(
             [ep_info["coin_taken_by_others"] for ep_info in self.ep_info_buffer]
         )
@@ -929,7 +641,7 @@ class CoinGamenner(BaseRunner):
         logger_info["results/own_coin_collected_episode"] = np.sum(
             [ep_info["own_coin_collected"] for ep_info in self.ep_info_buffer]
         )
-        # Each agent's coin collected case
+
         logger_info['results/agent_1_own_coin_collected_episode'] = np.sum(
            [ep_info["own_coin_collected"][0] for ep_info in self.ep_info_buffer]
         )
@@ -968,7 +680,6 @@ class CoinGamenner(BaseRunner):
         logger_info["results/agent_2_episode_reawrds"] = np.sum(
             [ep_info["step_rewards"][1] for ep_info in self.ep_info_buffer]
         )
-        
 
         logger_info["results/own_coin_proportion"] = safe_mean(
             [
@@ -993,7 +704,7 @@ class CoinGamenner(BaseRunner):
             [ep_info["collected_other_coin_repu"] for ep_info in self.ep_info_buffer]
         )
 
-        # skip first round has no training info
+
         logger_info["dilemma_train/learning_rate"] = safe_mean(
             [ep_info["learning_rate"] for ep_info in self.dilemma_train_info_buffer]
         )
@@ -1025,7 +736,7 @@ class CoinGamenner(BaseRunner):
             [ep_info["entropy_coef"] for ep_info in self.dilemma_train_info_buffer]
         )
 
-        # reputation training info
+
         logger_info["repu_train/learning_rate"] = safe_mean(
             [ep_info["learning_rate"] for ep_info in self.repu_train_info_buffer]
         )
@@ -1076,19 +787,19 @@ class CoinGamenner(BaseRunner):
 
                 calc_start = time.time()
 
-                # Get the dilemma action
+
                 dilemma_actions, dilemma_values, dilemma_log_probs = self.get_action(
                     action_type="dilemma", obs=eval_dilemma_obs, mode="eval"
                 )
-                # print(self._last_dilemma_obs[0][0])
+
                 updated_obs, rewards, _, truncations, dilemma_infos = env.step(
                     dilemma_actions, action_type="dilemma"
                 )
-                # use obs after dilemma action to evaluate reputation
+
                 repu_obs = self.process_obs_to_specific_usage(
                     updated_obs, "repu_obs", mode="eval"
                 )
-                # get reputation obs after dilemma action
+
                 eval_repu_obs = repu_obs.copy()
                 repu_actions, repu_values, repu_log_probs = self.get_action(
                     action_type="reputation", obs=eval_repu_obs, mode="eval"
@@ -1126,13 +837,12 @@ class CoinGamenner(BaseRunner):
                     )
 
         if self.all_args.save_gifs:
-            #     # resized_frames = [Image.fromarray(f).resize((320, 320), Image.BILINEAR) for f in all_frames]
-            #     imageio.mimsave(str(self.gif_dir) + '/render.gif', all_frames, duration=2)
 
-            fps = self.all_args.ifi  # 0.5 FPS = 2 sec per frame
-            target_size = (512, 560)  # divisible by 16
 
-            # Construct filename
+            fps = self.all_args.ifi
+            target_size = (512, 560)
+
+
             video_filename = f"Episode_{iteration_episode}.mp4"
             video_path = os.path.join(self.gif_dir, video_filename)
 
@@ -1140,10 +850,8 @@ class CoinGamenner(BaseRunner):
                 for frame in all_frames:
                     resized = Image.fromarray(frame).resize(target_size, Image.BILINEAR)
                     writer.append_data(np.array(resized))
-            
             if self.use_wandb:
                 self.log_video(
                     video_path,
                     iteration_episode
                 )
-          

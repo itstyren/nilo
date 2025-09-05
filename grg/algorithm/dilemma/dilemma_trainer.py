@@ -173,7 +173,6 @@ class Dilemma(baseAlgorithm):
                     advantages = (advantages - advantages.mean()) / (
                         advantages.std() + 1e-8
                     )
-                
                 if self.action_space.n < 3:
                     act_adv_sum[0].append(
                         (
@@ -285,7 +284,6 @@ class Dilemma(baseAlgorithm):
                 obs_to_predict_recipient_act.append(
                     [float(dilemma_obs[0][1]), update_repu]
                 )
-                
             else: 
                 temp_obs = []
                 num_agents = len(repu_obs_before_dilemma[0])
@@ -331,7 +329,6 @@ class Dilemma(baseAlgorithm):
                 clipped_repu_actions = clipped_repu_actions.flatten().reshape(
                     len(repu_obs_before_dilemma), len(repu_obs_before_dilemma[0])
                 )[:, self_index]
-                
 
             for i, single_obs in enumerate(rollout_obs):
                 for j, _obs in enumerate(single_obs):
@@ -368,7 +365,6 @@ class Dilemma(baseAlgorithm):
 
         obs_to_predict_recipient_act = []  
         repu_obs = []  
-        
         for _obs in repu_obs_after_dilemma:
             temp_obs = _obs[self_index]
             repu_obs.append(temp_obs)
@@ -392,16 +388,13 @@ class Dilemma(baseAlgorithm):
             agent_position=np.argwhere(operated_obs[i][0] != 0)
             operated_obs[i][0][tuple(
                 agent_position[0])] = clipped_repu_actions[i] if clipped_repu_actions[i] > 0 else 0.5
-            
             recipient_idx=1-self_index
             temp_recipient_obs = repu_obs_after_dilemma[i][recipient_idx][..., 0].copy()
             temp_recipient_obs[2][tuple(
                 agent_position[0])]=clipped_repu_actions[i] if clipped_repu_actions[i] > 0 else 0.5
-            
             obs_to_predict_recipient_act.append(
                 temp_recipient_obs
             )
-                
         obs_to_predict_recipient_act = np.array(obs_to_predict_recipient_act, dtype=np.float32)
         return torch.tensor(obs_to_predict_recipient_act).to(self.device), torch.tensor(
             operated_obs

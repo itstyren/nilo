@@ -15,9 +15,6 @@ from stable_baselines3.common.vec_env.base_vec_env import (
 
 
 class CloudpickleWrapper(object):
-    """
-    Uses cloudpickle to serialize contents (otherwise multiprocessing tries to use pickle)
-    """
 
     def __init__(self, x):
         self.x = x
@@ -34,12 +31,6 @@ class CloudpickleWrapper(object):
 
 
 class ShareVecEnv(ABC):
-    """
-    An abstract asynchronous, vectorized environment.
-    Used to batch data from multiple copies of an environment, so that
-    each observation becomes an batch of observations, and expected action is a batch of actions to
-    be applied per-environment.
-    """
 
     closed = False
     viewer = None
@@ -53,55 +44,18 @@ class ShareVecEnv(ABC):
 
     @abstractmethod
     def reset(self):
-        """
-        Reset all the environments and return an array of
-        observations, or a dict of observation arrays.
-
-        If step_async is still doing work, that work will
-        be cancelled and step_wait() should not be called
-        until step_async() is invoked again.
-        """
         pass
 
     @abstractmethod
     def step_async(self, actions,action_type,move_step=True):
-        """
-        Tell all the environments to start taking a step
-        with the given actions.
-        Call step_wait() to get the results of the step.
-
-        You should not call this if a step_async run is
-        already pending.
-        """
         pass
 
     @abstractmethod
     def step_wait(self):
-        """
-        Wait for the step taken with step_async().
-
-        Returns (obs, rews, dones, infos):
-         - obs: an array of observations, or a dict of
-                arrays of observations.
-         - rews: an array of rewards
-         - dones: an array of "episode done" booleans
-         - infos: a sequence of info objects
-        """
         pass
 
-    # @abstractmethod
-    # def calcu_async(self, actions):
-    #     pass
-
-    # @abstractmethod
-    # def calcu_wait(self):
-    #     pass
 
     def close_extras(self):
-        """
-        Clean up the  extra resources, beyond what's in this base class.
-        Only runs when not self.closed.
-        """
         pass
 
     def close(self):
@@ -113,14 +67,6 @@ class ShareVecEnv(ABC):
         self.closed = True
 
     def step(self, actions, action_type,move_step=True):
-        """
-        Step the environments synchronously.
-
-        This is available for backwards compatibility.
-
-        :param action: the action to take
-        :param action_type: the type of action (asssessment means only update self assessment)        
-        """
         self.step_async(actions, action_type,move_step)
         return self.step_wait()
 
@@ -128,15 +74,8 @@ class ShareVecEnv(ABC):
         self.repu_async(repus, update_env)
         return self.repu_wait()
 
-    # def calculate_reward(self):
-    #     self.calcu_async()
-    #     return self.calcu_wait()
-
 
 class DummyVecEnv(ShareVecEnv):
-    """
-    Sing Env
-    """
 
     def __init__(self, env_fns):
         self.envs = [fn() for fn in env_fns]
@@ -166,19 +105,19 @@ class DummyVecEnv(ShareVecEnv):
             else:
                 obs, rews, termination, truncation, infos = result
 
-            # checking whether a variable named done is of type bool or a NumPy array
+
         if (
             "bool" in truncation.__class__.__name__
             or "bool" in termination.__class__.__name__
         ):
             if termination:
                 obs, cl = self.env.reset(options="termination")
-                # print(cl)
+
             elif truncation:
                 obs, cl = self.env.reset()
 
         self.actions = None
-        # compatibility with the multi env version
+
         return (
             np.array([obs]),
             np.array([rews]),
@@ -208,14 +147,8 @@ class DummyVecEnv(ShareVecEnv):
 
 
 class SubprocVecEnv(ShareVecEnv):
-    """
-    Multiple Env
-    """
 
     def __init__(self, env_fns, spaces=None):
-        """
-        envs: list of gym environments to run in subprocesses
-        """
         self.waiting = False
         self.closed = False
         nenvs = len(env_fns)
@@ -230,7 +163,7 @@ class SubprocVecEnv(ShareVecEnv):
         ]
         for p in self.ps:
             p.daemon = (
-                True  # if the main process crashes, we should not cause things to hang
+                True
             )
             p.start()
         for remote in self.work_remotes:
@@ -288,7 +221,7 @@ class SubprocVecEnv(ShareVecEnv):
             remote.send(("render", (mode, step)))
         if mode == "train":
             results = [remote.recv() for remote in self.remotes]
-            # breakpoint()
+
             frame, action_array, repu_array = zip(*results)
             return np.stack(frame), np.stack(action_array), np.stack(repu_array)
 
@@ -311,16 +244,16 @@ def worker(remote, parent_remote, env_fn_wrapper):
                     pass
                 else:
                     obs, rews, termination, truncation, infos = result
-            # checking whether a variable named done is of type bool or a NumPy array
+
             if (
                 "bool" in truncation.__class__.__name__
                 or "bool" in termination.__class__.__name__
             ):
                 if termination:
-                    # print("Termination")
+
                     obs, cl = env.reset(options="termination")
                 elif truncation:
-                    # print("Truncation")
+
                     obs, cl = env.reset()
             remote.send(
                 (
@@ -364,18 +297,6 @@ def worker(remote, parent_remote, env_fn_wrapper):
 def _flatten_obs(
     obs: Union[List[VecEnvObs], Tuple[VecEnvObs]], space: spaces.Space
 ) -> VecEnvObs:
-    """
-    Flatten observations, depending on the observation space.
-
-    :param obs: observations.
-                A list or tuple of observations, one per environment.
-                Each environment observation may be a NumPy array, or a dict or tuple of NumPy arrays.
-    :return: flattened observations.
-            A flattened NumPy array or an OrderedDict or tuple of flattened numpy arrays.
-            Each NumPy array has the environment index as its first axis.
-    """
-    # if should_combine_nested_dicts(space):
-    #     space=combine_nested_dicts(space)
 
 
     assert isinstance(
@@ -387,49 +308,31 @@ def _flatten_obs(
     if isinstance(space, spaces.Dict) and isinstance(obs[0], dict):
         assert isinstance(space.spaces, dict), "Dict space must have ordered subspaces"
         assert isinstance(obs[0], dict), "non-dict observation for environment with Dict observation space"
-        return {key: np.stack([single_obs[key] for single_obs in obs]) for key in space.spaces.keys()}  # type: ignore[call-overload]
+        return {key: np.stack([single_obs[key] for single_obs in obs]) for key in space.spaces.keys()}
     elif isinstance(space, spaces.Tuple):
         assert isinstance(obs[0], tuple), "non-tuple observation for environment with Tuple observation space"
         obs_len = len(space.spaces)
-        return tuple(np.stack([single_obs[i] for single_obs in obs]) for i in range(obs_len))  # type: ignore[index]
+        return tuple(np.stack([single_obs[i] for single_obs in obs]) for i in range(obs_len))
     else:
-        return np.stack(obs)  # type: ignore[arg-type]
+        return np.stack(obs)
 
 
 def combine_nested_dicts(nested_dict):
-    """
-    Flattens a nested dictionary structure (e.g., Dict(Dict(), Dict())) into a single level dictionary.
-
-    Args:
-        nested_dict (Dict): A dictionary where values may themselves be dictionaries.
-
-    Returns:
-        Dict: A flattened dictionary containing all key-value pairs from the nested dictionaries.
-    """
     if not should_combine_nested_dicts(nested_dict):
         raise ValueError("Input is not a nested dictionary suitable for combining.")
 
     combined_dict = {}
     for outer_key, inner_dict in nested_dict.items():
-        if isinstance(inner_dict, Dict):  # Check if the value is a dictionary
-            combined_dict.update(inner_dict)  # Add all key-value pairs from the inner dictionary
+        if isinstance(inner_dict, Dict):
+            combined_dict.update(inner_dict)
         else:
-            combined_dict[outer_key] = inner_dict  # Add the non-dict value directly
+            combined_dict[outer_key] = inner_dict
 
     return Dict(combined_dict)
 
 
 def should_combine_nested_dicts(nested_dict):
-    """
-    Checks if the input dictionary is a Dict containing other Dict objects.
-    
-    Args:
-        nested_dict (Dict): The dictionary to check.
-
-    Returns:
-        bool: True if the dictionary contains other Dict objects as values, False otherwise.
-    """
     if isinstance(nested_dict, Dict):
-        # Check if any value in the Dict is itself a Dict
+
         return any(isinstance(value, Dict) for value in nested_dict.values())
     return False

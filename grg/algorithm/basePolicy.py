@@ -64,7 +64,7 @@ class baseMode(BaseModel):
             assert isinstance(
                 observation_space, spaces.Dict
             ), f"The observation provided is a dict but the obs space is {observation_space}"
-            # need to copy the dict as the dict in VecFrameStack will become a torch tensor
+
             observation = copy.deepcopy(observation)
             for key, obs in observation.items():
                 obs_space = observation_space.spaces[key]
@@ -75,7 +75,7 @@ class baseMode(BaseModel):
                 vectorized_env = vectorized_env or is_vectorized_observation(
                     obs_, obs_space
                 )
-                observation[key] = obs_.reshape((-1, *observation_space[key].shape))  # type: ignore[misc]
+                observation[key] = obs_.reshape((-1, *observation_space[key].shape))
 
         elif is_image_space(observation_space):
             observation = maybe_transpose(observation, observation_space)
@@ -85,14 +85,13 @@ class baseMode(BaseModel):
 
         if not isinstance(observation, dict):
             vectorized_env = is_vectorized_observation(observation, observation_space)
-            observation = observation.reshape((-1, *observation_space.shape))  # type: ignore[misc]
+            observation = observation.reshape((-1, *observation_space.shape))
 
         obs_tensor = obs_as_tensor(observation, self.device)
         return obs_tensor, vectorized_env
 
     def create_features_extractor(self) -> BaseFeaturesExtractor:
         return self.features_extractor_class(self.observation_space, **self.features_extractor_kwargs)
-    
 
     def create_critic_extractor(self) -> BaseFeaturesExtractor:
         return self.features_extractor_class(

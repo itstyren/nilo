@@ -55,13 +55,13 @@ class ReputationPolicy(basePolicy):
 
         if optimizer_kwargs is None:
             optimizer_kwargs = {}
-            # Small values to avoid NaN in Adam optimizer
+
             if optimizer_class == torch.optim.Adam:
                 optimizer_kwargs["eps"] = 1e-5
 
         self.args = args
         self.vf_observation_space = vf_observation_space
-        # breakpoint()
+
         super().__init__(
             observation_space,
             action_space,
@@ -72,7 +72,7 @@ class ReputationPolicy(basePolicy):
             optimizer_kwargs=optimizer_kwargs,
         )
 
-        # Default network architecture, from stable-baselines
+
         if net_arch is None:
             if features_extractor_class == CnnGRUExtractor:
                 net_arch = []
@@ -81,12 +81,12 @@ class ReputationPolicy(basePolicy):
 
         self.net_arch = net_arch
         self.activation_fn = activation_fn
-        # self.activation_fn = nn.Sigmoid
+
         self.ortho_init = ortho_init
 
         self.share_features_extractor = share_features_extractor
         self.make_features_extractor()
-        # breakpoint()
+
 
         self.log_std_init = log_std_init
         dist_kwargs = None
@@ -94,7 +94,7 @@ class ReputationPolicy(basePolicy):
         assert not (
             squash_output and not use_sde
         ), "squash_output=True is only available when using gSDE (use_sde=True)"
-        # Keyword arguments for gSDE distribution
+
         if use_sde:
             dist_kwargs = {
                 "full_std": full_std,
@@ -105,7 +105,7 @@ class ReputationPolicy(basePolicy):
 
         self.use_sde = use_sde
         self.dist_kwargs = dist_kwargs
-        # Action distribution
+
         self.action_dist = make_proba_distribution(
             action_space, use_sde=use_sde, dist_kwargs=dist_kwargs
         )
@@ -163,15 +163,15 @@ class ReputationPolicy(basePolicy):
             for module, gain in module_gains.items():
                 module.apply(partial(self.init_weights, gain=gain))
 
-        self.optimizer = self.optimizer_class(self.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)  # type: ignore[call-arg]
+        self.optimizer = self.optimizer_class(self.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
 
     def forward(
         self, obs: torch.Tensor, deterministic: bool = False
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
 
-        # Preprocess the observation if needed
+
         act_features = self.extract_features(obs, features_type="pi")
-        # Evaluate the values for the given observations
+
         latent_pi = self.mlp_extractor.forward_actor(act_features)
         distribution = self._get_action_dist_from_latent(latent_pi)
         actions = distribution.get_actions(deterministic=deterministic)
@@ -185,17 +185,17 @@ class ReputationPolicy(basePolicy):
 
     def _get_action_dist_from_latent(self, latent_pi: torch.Tensor) -> Distribution:
         mean_actions = self.action_net(latent_pi)
-        # F.softmax(mean_actions, dim=-1)
+
         if isinstance(self.action_dist, DiagGaussianDistribution):
             return self.action_dist.proba_distribution(mean_actions, self.log_std)
         elif isinstance(self.action_dist, CategoricalDistribution):
-            # Here mean_actions are the logits before the softmax
+
             return self.action_dist.proba_distribution(action_logits=mean_actions)
         elif isinstance(self.action_dist, MultiCategoricalDistribution):
-            # Here mean_actions are the flattened logits
+
             return self.action_dist.proba_distribution(action_logits=mean_actions)
         elif isinstance(self.action_dist, BernoulliDistribution):
-            # Here mean_actions are the logits (before rounding to get the binary actions)
+
             return self.action_dist.proba_distribution(action_logits=mean_actions)
         elif isinstance(self.action_dist, StateDependentNoiseDistribution):
             return self.action_dist.proba_distribution(
@@ -204,7 +204,7 @@ class ReputationPolicy(basePolicy):
         else:
             raise ValueError("Invalid action distribution")
 
-    def extract_features(  # type: ignore[override]
+    def extract_features(
         self,
         obs: PyTorchObs,
         features_type: str = "pi",
@@ -227,13 +227,12 @@ class ReputationPolicy(basePolicy):
 
             for batch_idx in range(obs.shape[0]):
                 agent_position=critic_obs[batch_idx][0]
-                # Loop through all vectors and modify
-                for idx in np.ndindex(agent_position.shape[:2]):  # iterate over first two dims (3, 3)
+
+                for idx in np.ndindex(agent_position.shape[:2]):
                     vec = agent_position[idx]
-                    if vec[0] >0:  # Check if the vector is [1, 0, 0]
-                        critic_obs[batch_idx][0][idx][-1] = actions[batch_idx]# Set the last element to the action value
+                    if vec[0] >0:
+                        critic_obs[batch_idx][0][idx][-1] = actions[batch_idx]
             critic_obs= critic_obs.view(*critic_obs.shape[:-2], -1)
-            
             obs = obs.view(*obs.shape[:-2], -1)
         else:
             critic_obs = torch.cat(
@@ -241,7 +240,7 @@ class ReputationPolicy(basePolicy):
             dim=1,
         )       
 
-        # Preprocess the observation if needed
+
         act_features = self.extract_features(obs, features_type="pi")
 
         latent_pi = self.mlp_extractor.forward_actor(act_features)
@@ -252,16 +251,10 @@ class ReputationPolicy(basePolicy):
         vf_features = self.extract_features(critic_obs, features_type="vf")
         latent_vf = self.mlp_extractor.forward_critic(vf_features)
         values = self.value_net(latent_vf)
-        # values=torch.gather(values, 1, actions.unsqueeze(1))
+
         return values, log_prob, entropy, distribution
 
     def predict_values(self, obs: PyTorchObs) -> torch.Tensor:
-        """
-        Get the estimated values according to the current policy given the observations.
-
-        :param obs: Observation
-        :return: the estimated values.
-        """
         features = super().extract_features(obs, self.vf_features_extractor)
         latent_vf = self.mlp_extractor.forward_critic(features)
         return self.value_net(latent_vf)
@@ -361,9 +354,7 @@ class ReputationPolicy(basePolicy):
             final_value = predict_value - repu_baseline_weight * baseline_value
 
         final_value = (final_value - final_value.mean()) / (final_value.std() + 1e-8)
-        
         return final_value
-
 
 
     def get_value_for_critic_2(
@@ -376,7 +367,6 @@ class ReputationPolicy(basePolicy):
         repu_baseline_weight: float = 0.5,
         rewards: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        
 
         with torch.no_grad():
 
@@ -393,7 +383,6 @@ class ReputationPolicy(basePolicy):
 
             recipient_act_exp = recipient_act.unsqueeze(1) 
 
-           
             mask = all_actions.unsqueeze(0) != recipient_act_exp 
 
             counterfact_act = all_actions.expand(recipient_act.shape[0], 5)[mask].reshape(recipient_act.shape[0], 4)  
@@ -412,7 +401,6 @@ class ReputationPolicy(basePolicy):
             selected_recipient_actions=selected_recipient_actions/max_actions
 
 
-
             all_possible_values=[]
             for action_idx in range(max_actions+1):
                 temp_obs=last_dilemma_value_obs.clone()
@@ -422,7 +410,6 @@ class ReputationPolicy(basePolicy):
                         ) 
                         temp_obs[batch_idx][-2][tuple(recipient_position[0])][1]=recipient_action[action_idx]
                 all_possible_values.append(dilemma_policy.predict_values(temp_obs.reshape(*temp_obs.shape[:-2], -1)).reshape(-1))
-            
             all_possible_values=torch.stack(all_possible_values, dim=1)
             baseline_value = (selected_dilemma_probs * all_possible_values).sum(dim=1)
 
@@ -434,7 +421,6 @@ class ReputationPolicy(basePolicy):
 
         final_value = (final_value - final_value.mean()) / (final_value.std() + 1e-8)
         return final_value
-
 
 
 class ReputationCnnPolicy(ReputationPolicy):
